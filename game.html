@@ -182,11 +182,11 @@
 
     // ── Background colour key-frames [R, G, B] ───────────────────
     // Mapped to progress breakpoints: 0  →  P1  →  P2  →  0.75  →  1.0
-    BG_START: [ 18,  8, 38],      // t=0         : warm dusk purple
-    BG_P1:    [165, 62, 12],      // progress=0.1: orange dusk peak  (≈ 2 min)
-    BG_P2:    [  7, 11, 54],      // progress=0.25: deep night blue  (≈ 5 min)
-    BG_P3:    [  3,  5, 21],      // progress=0.75: very dark blue
-    BG_END:   [  1,  2,  8],      // progress=1.0 : near-black blue
+    BG_START: [ 14, 18, 62],      // t=0         : clear dark-blue starry sky
+    BG_P1:    [ 10, 14, 52],      // progress=0.1: slightly deeper blue  (≈ 2 min)
+    BG_P2:    [  5,  8, 40],      // progress=0.25: deep night blue  (≈ 5 min)
+    BG_P3:    [  2,  4, 20],      // progress=0.75: very dark deep blue
+    BG_END:   [  1,  1,  8],      // progress=1.0 : near-black space
   };
 
   // ── Phase breakpoints in progress-space (derived, don't edit) ──
@@ -227,6 +227,8 @@
 
   // Sky star population
   const skyStars = [];
+  const starConnections = [];
+  let lastBoostedStarIdx = -1;
 
 
   // ================================================================
@@ -602,6 +604,18 @@
     if (!skyStars.length) return;
     const idx = Math.floor(Math.random() * skyStars.length);
     skyStars[idx].glow = CONFIG.SKY_GLOW_BOOST;
+
+    if (lastBoostedStarIdx >= 0 && lastBoostedStarIdx !== idx) {
+      starConnections.push({
+        x1: skyStars[lastBoostedStarIdx].xf,
+        y1: skyStars[lastBoostedStarIdx].yf,
+        x2: skyStars[idx].xf,
+        y2: skyStars[idx].yf,
+        opacity: 0.55,
+        age: 0,
+      });
+    }
+    lastBoostedStarIdx = idx;
   }
 
   function drawStarShape(x, y, r, opacity, glow) {
@@ -668,6 +682,26 @@
     ctx.beginPath();
     ctx.rect(0, 0, canvas.width, roadTop);
     ctx.clip();
+
+    // Fade and draw connection lines between boosted stars
+    for (let i = starConnections.length - 1; i >= 0; i--) {
+      const cn = starConnections[i];
+      cn.age += dt;
+      cn.opacity = Math.max(0, 0.55 * (1 - cn.age / 9.0));
+      if (cn.opacity <= 0) { starConnections.splice(i, 1); continue; }
+
+      const lx1 = cn.x1 * canvas.width;
+      const ly1 = (0.05 + cn.y1 * 0.88) * roadTop;
+      const lx2 = cn.x2 * canvas.width;
+      const ly2 = (0.05 + cn.y2 * 0.88) * roadTop;
+
+      ctx.beginPath();
+      ctx.moveTo(lx1, ly1);
+      ctx.lineTo(lx2, ly2);
+      ctx.strokeStyle = `rgba(200, 220, 255, ${cn.opacity * 0.45})`;
+      ctx.lineWidth = 0.5;
+      ctx.stroke();
+    }
 
     for (const s of skyStars) {
       // Decay glow
