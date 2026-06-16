@@ -426,64 +426,12 @@
   }
 
   function playBell(pan, p) {
-    if (!bellAudioEl) return;
-
-    // Don't retrigger while previous bell is still in its attack/sustain — avoids choppiness
-    if (timeElapsed - bellLastTriggerAt < CONFIG.BELL_MIN_RETRIGGER) return;
-    bellLastTriggerAt = timeElapsed;
-
-    const rate     = lerp(CONFIG.BELL_RATE_START, CONFIG.BELL_RATE_END, p);
-    const wet      = lerp(CONFIG.BELL_REVERB_MIX_START, CONFIG.BELL_REVERB_MIX_END, p);
-    const gainPeak = lerp(CONFIG.BELL_GAIN_START, CONFIG.BELL_GAIN_END, p);
-
-    if (audioRoutingReady && audioCtx && audioCtx.state !== 'suspended' && bellPanner) {
-      const now = audioCtx.currentTime;
-
-      bellPanner.pan.setValueAtTime(clamp(pan, -1, 1), now);
-      bellFilter.frequency.setValueAtTime(lerp(CONFIG.BELL_LOWPASS_START, CONFIG.BELL_LOWPASS_END, p), now);
-      bellWetGain.gain.setValueAtTime(wet, now);
-      bellDryGain.gain.setValueAtTime(1 - wet * 0.82, now);
-
-      // Aggressive fade envelope: peak -> sustain -> ramp to silence
-      const fadeStart = now + CONFIG.BELL_FADEOUT_START;
-      const fadeEnd   = fadeStart + CONFIG.BELL_FADEOUT_DURATION;
-      bellGain.gain.cancelScheduledValues(now);
-      bellGain.gain.setValueAtTime(gainPeak, now);
-      bellGain.gain.setValueAtTime(gainPeak * 0.72, now + CONFIG.BELL_FADEOUT_START * 0.6);
-      bellGain.gain.linearRampToValueAtTime(0.0001, fadeEnd);
-
-      bellAudioEl.pause();
-      bellAudioEl.currentTime = CONFIG.BELL_START_OFFSET;
-      bellAudioEl.playbackRate = rate;
-      bellAudioEl.play().catch(() => {});
-
-      // Hard stop slightly after silence is reached
-      if (bellStopTimer) clearTimeout(bellStopTimer);
-      const totalMs = (fadeEnd - now + 0.1) * 1000;
-      bellStopTimer = setTimeout(() => {
-        bellAudioEl.pause();
-      }, totalMs);
-      return;
-    }
-
-    // Fallback (no Web Audio routing): use a one-shot cloned element with native volume fade
-    const bellShot = new Audio(CONFIG.AUDIO_FILES.BELL);
-    bellShot.currentTime = CONFIG.BELL_START_OFFSET;
-    bellShot.playbackRate = rate;
-    bellShot.volume = gainPeak;
-    bellShot.play().catch(() => {});
-
-    // Simulate fade: step volume down at intervals
-    const fadeSteps = 12;
-    const fadeStartMs = CONFIG.BELL_FADEOUT_START * 1000;
-    const fadeDurMs   = CONFIG.BELL_FADEOUT_DURATION * 1000;
-    for (let i = 0; i <= fadeSteps; i++) {
-      const t = i / fadeSteps;
-      setTimeout(() => {
-        if (!bellShot.paused) bellShot.volume = Math.max(0, gainPeak * (1 - t));
-      }, fadeStartMs + t * fadeDurMs);
-    }
-    setTimeout(() => { bellShot.pause(); }, (CONFIG.BELL_FADEOUT_START + CONFIG.BELL_FADEOUT_DURATION + 0.1) * 1000);
+    // ── Bell sound disabled for now — uncomment the block below to re-enable ──
+    //
+    // const bellShot = new Audio(CONFIG.AUDIO_FILES.BELL);
+    // bellShot.currentTime = 0;
+    // bellShot.volume = 0.7;
+    // bellShot.play().catch(() => {});
   }
 
 
@@ -809,8 +757,13 @@
 
           if (pL >= gL && pR <= gR) {
             // Player passed through the gate
-            // Map screen position to pan: saturates to ±1 at ±PAN_SATURATE_AT of half-width
-            const rawNorm = (g.x / canvas.width) * 2 - 1;  // -1 … +1 from screen edges
+            // Use the outermost pillar edge on the side of the gate center for pan.
+            // Centre right → right pillar outer edge; centre left → left pillar outer edge.
+            const centerNorm  = (g.x / canvas.width) * 2 - 1;
+            const outerEdgeX  = centerNorm >= 0
+              ? g.x + g.gapWidth / 2    // right pillar outer edge
+              : g.x - g.gapWidth / 2;   // left pillar outer edge
+            const rawNorm = (outerEdgeX / canvas.width) * 2 - 1;
             const pan = clamp(rawNorm / CONFIG.PAN_SATURATE_AT, -1, 1);
             if (soundEnabled) playBell(pan, p);
             triggerHaptic();
