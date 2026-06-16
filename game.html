@@ -124,7 +124,7 @@
     SKY_HEIGHT_FRACTION: 0.35,    // top 35% = star sky, bottom 65% = road
 
     // ── Road scroll speed (px / second) ─────────────────────────
-    SCROLL_SPEED_START:  255,     // at t = 0 (15% slower than previous 300)
+    SCROLL_SPEED_START:  180,     // at t = 0 (-30% vs 255, -40% vs original 300)
     SCROLL_SPEED_END:    75,      // at t = TRANSITION_DURATION
 
     // ── Gate spawn interval (seconds between gates) ──────────────
@@ -176,7 +176,8 @@
     BELL_PLAY_WINDOW:      4.5,
     BELL_FADEOUT_START:    2.0,   // seconds after bell start when fade begins
     BELL_FADEOUT_DURATION: 2.5,   // duration of the fade-out ramp
-    PAN_CURVE_EXP:    0.65,       // < 1 exaggerates stereo separation near edges
+    PAN_SATURATE_AT:  0.66,       // gate position (fraction of half-screen) that maps to pan ±1
+    BELL_MIN_RETRIGGER: 1.8,       // min seconds between bell triggers to avoid choppy overlaps
 
     // ── Haptic phase thresholds (as fraction of TRANSITION_DURATION)
     HAPTIC_PHASE1_FRAC: 2 / 20,   // strong tap until this fraction of total time
@@ -299,9 +300,10 @@
   let bellDryGain     = null;
   let bellWetGain     = null;
   let bellConvolver   = null;
-  let bellStopTimer   = null;
+  let bellStopTimer     = null;
+  let bellLastTriggerAt = -999;
   let audioRoutingReady = false;
-  let audioReady      = false;
+  let audioReady        = false;
 
   function createImpulseResponse(ctx, durationSec, decay) {
     const length = Math.max(1, Math.floor(ctx.sampleRate * durationSec));
@@ -425,6 +427,10 @@
 
   function playBell(pan, p) {
     if (!bellAudioEl) return;
+
+    // Don't retrigger while previous bell is still in its attack/sustain — avoids choppiness
+    if (timeElapsed - bellLastTriggerAt < CONFIG.BELL_MIN_RETRIGGER) return;
+    bellLastTriggerAt = timeElapsed;
 
     const rate     = lerp(CONFIG.BELL_RATE_START, CONFIG.BELL_RATE_END, p);
     const wet      = lerp(CONFIG.BELL_REVERB_MIX_START, CONFIG.BELL_REVERB_MIX_END, p);
@@ -803,9 +809,9 @@
 
           if (pL >= gL && pR <= gR) {
             // Player passed through the gate
-            const panRange = Math.max(1, g.panMaxX - g.panMinX);
-            const normalized = ((g.x - g.panMinX) / panRange) * 2 - 1;
-            const pan = Math.sign(normalized) * Math.pow(Math.abs(clamp(normalized, -1, 1)), CONFIG.PAN_CURVE_EXP);
+            // Map screen position to pan: saturates to ±1 at ±PAN_SATURATE_AT of half-width
+            const rawNorm = (g.x / canvas.width) * 2 - 1;  // -1 … +1 from screen edges
+            const pan = clamp(rawNorm / CONFIG.PAN_SATURATE_AT, -1, 1);
             if (soundEnabled) playBell(pan, p);
             triggerHaptic();
             boostRandomStar();
