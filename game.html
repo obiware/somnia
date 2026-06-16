@@ -146,12 +146,10 @@
     PLAYER_RADIUS:     18,        // px
     PLAYER_Y_FRACTION: 0.86,      // lower on screen (about 14% from bottom)
 
-    // ── Constellations ───────────────────────────────────────────
-    CONSTELLATION_MAX_STARS:  30, // stars per constellation before cycling
-    STAR_FADE_IN_DURATION:   1.5, // seconds — phase-3 star fade-in
-    STAR_TWINKLE_DURATION:   0.9, // seconds — strong sparkle right after spawn
-    STAR_LIFETIME:           8.0, // seconds — progressive star fade-out
-    CONSTELLATION_FADE_OUT:   5,  // seconds — old constellation fades to 5 % opacity
+    // ── Sky stars ────────────────────────────────────────────────
+    SKY_STAR_COUNT:    110,        // total persistent stars in the sky
+    SKY_GLOW_DECAY:    0.50,       // how fast a gate-brightened star fades (per sec)
+    SKY_GLOW_BOOST:    1.0,        // glow intensity when a gate is passed (0-1)
 
     // ── Audio files (place these in public/audio/) ───────────────
     AUDIO_FILES: {
@@ -227,9 +225,8 @@
   let gates             = [];
   let timeSinceLastGate = 9999;   // trigger first spawn immediately
 
-  // Constellations
-  let constellations       = [];
-  let currentConstellation = null;
+  // Sky star population
+  const skyStars = [];
 
 
   // ================================================================
@@ -583,151 +580,110 @@
 
 
   // ================================================================
-  //  Constellation system
+  //  Sky star system
   // ================================================================
-  function startNewConstellation() {
-    const c = { stars: [], lines: [], opacity: 1, fading: false, fadeTimer: 0 };
-    constellations.push(c);
-    currentConstellation = c;
-  }
-
-  function addStar(gateX) {
-    const p     = getProgress();
-    const phase = p < P1 ? 1 : p < P2 ? 2 : 3;
-
-    if (!currentConstellation ||
-        currentConstellation.stars.length >= CONFIG.CONSTELLATION_MAX_STARS) {
-      if (currentConstellation) currentConstellation.fading = true;
-      startNewConstellation();
-    }
-
-    const star = {
-      x:       0.05 * canvas.width + Math.random() * 0.90 * canvas.width,
-      y:       0.06 * getRoadTop() + Math.random() * 0.86 * getRoadTop(),
-      phase,
-      age:     0,
-      seed:    Math.random() * Math.PI * 2,
-    };
-
-    const prev = currentConstellation.stars[currentConstellation.stars.length - 1];
-    if (prev) {
-      currentConstellation.lines.push({
-        x1: prev.x, y1: prev.y,
-        x2: star.x, y2: star.y,
-        phase,
+  function initSkyStars() {
+    skyStars.length = 0;
+    for (let i = 0; i < CONFIG.SKY_STAR_COUNT; i++) {
+      skyStars.push({
+        xf:          Math.random(),
+        yf:          Math.random(),
+        r:           Math.random() * 1.5 + 0.5,
+        baseOpacity: Math.random() * 0.45 + 0.12,
+        twSpeed:     Math.random() * 0.7 + 0.15,
+        twOffset:    Math.random() * Math.PI * 2,
+        glow:        0,
+        glowDecay:   CONFIG.SKY_GLOW_DECAY * (0.75 + Math.random() * 0.5),
       });
     }
-    currentConstellation.stars.push(star);
+  }
+
+  function boostRandomStar() {
+    if (!skyStars.length) return;
+    const idx = Math.floor(Math.random() * skyStars.length);
+    skyStars[idx].glow = CONFIG.SKY_GLOW_BOOST;
+  }
+
+  function drawStarShape(x, y, r, opacity, glow) {
+    const totalGlow = glow;
+    const spikeFactor = 1 + totalGlow * 1.8;
+
+    // Outer glow halo
+    const haloR = r * (5 + totalGlow * 12);
+    const haloGrd = ctx.createRadialGradient(x, y, 0, x, y, haloR);
+    const haloOp = Math.min(1, opacity * 0.45 + totalGlow * 0.65);
+    haloGrd.addColorStop(0,   `rgba(200, 220, 255, ${haloOp})`);
+    haloGrd.addColorStop(0.4, `rgba(170, 200, 255, ${haloOp * 0.35})`);
+    haloGrd.addColorStop(1,   'rgba(140, 180, 255, 0)');
+    ctx.fillStyle = haloGrd;
+    ctx.beginPath();
+    ctx.arc(x, y, haloR, 0, Math.PI * 2);
+    ctx.fill();
+
+    // 4-pointed spike shape
+    const outer = r * spikeFactor * 2.8;
+    const inner = r * 0.18;
+    ctx.fillStyle = `rgba(235, 245, 255, ${Math.min(1, opacity + totalGlow * 0.5)})`;
+    ctx.beginPath();
+    ctx.moveTo(x,         y - outer);
+    ctx.bezierCurveTo(x + inner, y - inner, x + inner, y - inner, x + outer, y);
+    ctx.bezierCurveTo(x + inner, y + inner, x + inner, y + inner, x,         y + outer);
+    ctx.bezierCurveTo(x - inner, y + inner, x - inner, y + inner, x - outer, y);
+    ctx.bezierCurveTo(x - inner, y - inner, x - inner, y - inner, x,         y - outer);
+    ctx.closePath();
+    ctx.fill();
+
+    // Bright centre core
+    ctx.fillStyle = `rgba(255, 255, 255, ${Math.min(1, opacity + totalGlow * 0.7)})`;
+    ctx.beginPath();
+    ctx.arc(x, y, r * 0.6, 0, Math.PI * 2);
+    ctx.fill();
   }
 
 
   // ================================================================
-  //  Draw: sky + constellations
+  //  Draw: sky + stars
   // ================================================================
-  function drawSky(dt, p) {
+  function drawSky(dt, p, tSec) {
     const roadTop = getRoadTop();
     const [r, g, b] = getBgColor(p);
+
+    // Full canvas dark base
     ctx.fillStyle = 'rgb(2,3,10)';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
+    // Sky gradient in top 35%
     const skyGrad = ctx.createLinearGradient(0, 0, 0, roadTop);
     skyGrad.addColorStop(0, `rgb(${Math.min(255, r + 18)},${Math.min(255, g + 24)},${Math.min(255, b + 30)})`);
     skyGrad.addColorStop(1, `rgb(${r},${g},${b})`);
     ctx.fillStyle = skyGrad;
     ctx.fillRect(0, 0, canvas.width, roadTop);
 
+    // Horizon separator glow
     ctx.fillStyle = 'rgba(150,180,255,0.06)';
     ctx.fillRect(0, roadTop - 2, canvas.width, 2);
 
-    // Advance fade timers
-    for (const c of constellations) {
-      if (c.fading) {
-        c.fadeTimer += dt;
-        c.opacity = Math.max(0.05, 1 - (c.fadeTimer / CONFIG.CONSTELLATION_FADE_OUT) * 0.95);
-      }
+    // Draw stars clipped to sky zone
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(0, 0, canvas.width, roadTop);
+    ctx.clip();
+
+    for (const s of skyStars) {
+      // Decay glow
+      s.glow = Math.max(0, s.glow - s.glowDecay * dt);
+
+      // Twinkle
+      const twinkle = Math.sin(tSec * s.twSpeed + s.twOffset) * 0.12;
+      const opacity = Math.max(0, s.baseOpacity + twinkle);
+
+      const sx = s.xf * canvas.width;
+      const sy = (0.05 + s.yf * 0.88) * roadTop;
+
+      drawStarShape(sx, sy, s.r, opacity, s.glow);
     }
 
-    // Draw constellations in sky area only
-    for (const c of constellations) {
-      if (c.opacity <= 0) continue;
-      ctx.save();
-      ctx.beginPath();
-      ctx.rect(0, 0, canvas.width, roadTop);
-      ctx.clip();
-      ctx.globalAlpha = c.opacity;
-      _drawConstellation(c, dt);
-      ctx.restore();
-    }
-  }
-
-  function _drawConstellation(c, dt) {
-    // Lines
-    for (const ln of c.lines) {
-      ctx.beginPath();
-      ctx.moveTo(ln.x1, ln.y1);
-      ctx.lineTo(ln.x2, ln.y2);
-      if (ln.phase === 1) {
-        ctx.strokeStyle = 'rgba(255, 235, 150, 0.6)';
-        ctx.lineWidth   = 1;
-        ctx.shadowBlur  = 0;
-      } else if (ln.phase === 2) {
-        ctx.strokeStyle = 'rgba(155, 185, 255, 0.22)';
-        ctx.lineWidth   = 2;
-        ctx.shadowBlur  = 9;
-        ctx.shadowColor = 'rgba(130, 165, 255, 0.28)';
-      } else {
-        ctx.strokeStyle = 'rgba(130, 140, 210, 0.10)';
-        ctx.lineWidth   = 1;
-        ctx.shadowBlur  = 0;
-      }
-      ctx.stroke();
-      ctx.shadowBlur = 0;
-    }
-
-    // Stars
-    for (const s of c.stars) {
-      s.age += dt;
-
-      let alpha;
-      if (s.age < CONFIG.STAR_TWINKLE_DURATION) {
-        alpha = 0.55 + 0.45 * Math.abs(Math.sin(s.age * 38 + s.seed));
-      } else {
-        const fadeT = (s.age - CONFIG.STAR_TWINKLE_DURATION) / CONFIG.STAR_LIFETIME;
-        alpha = Math.max(0, 1 - fadeT);
-      }
-
-      if (s.phase === 3) {
-        alpha *= Math.min(1, s.age / CONFIG.STAR_FADE_IN_DURATION) * 0.62;
-      }
-
-      ctx.save();
-      ctx.globalAlpha *= alpha;
-
-      if (s.phase === 1) {
-        ctx.shadowBlur  = 10;
-        ctx.shadowColor = '#ffcc44';
-        ctx.fillStyle   = '#ffe880';
-        ctx.beginPath();
-        ctx.arc(s.x, s.y, 2.5, 0, Math.PI * 2);
-        ctx.fill();
-      } else if (s.phase === 2) {
-        const g = ctx.createRadialGradient(s.x, s.y, 0, s.x, s.y, 9);
-        g.addColorStop(0, 'rgba(175, 200, 255, 0.9)');
-        g.addColorStop(1, 'rgba(75,  100, 210, 0)');
-        ctx.fillStyle = g;
-        ctx.beginPath();
-        ctx.arc(s.x, s.y, 9, 0, Math.PI * 2);
-        ctx.fill();
-      } else {
-        ctx.shadowBlur  = 5;
-        ctx.shadowColor = 'rgba(155, 145, 225, 0.4)';
-        ctx.fillStyle   = 'rgba(155, 145, 225, 0.75)';
-        ctx.beginPath();
-        ctx.arc(s.x, s.y, 2, 0, Math.PI * 2);
-        ctx.fill();
-      }
-      ctx.restore();
-    }
+    ctx.restore();
   }
 
 
@@ -804,7 +760,7 @@
             const pan = Math.sign(normalized) * Math.pow(Math.abs(clamp(normalized, -1, 1)), CONFIG.PAN_CURVE_EXP);
             if (soundEnabled) playBell(pan, p);
             triggerHaptic();
-            addStar(g.x);
+            boostRandomStar();
           }
           // On miss: nothing happens (no punishment)
         }
@@ -931,7 +887,7 @@
     if (soundEnabled && rainFilter) updateRainFilter(p);
 
     // Render
-    drawSky(dt, p);
+    drawSky(dt, p, ts / 1000);
     drawRoad(dt, p);
     updateAndDrawGates(dt, p);
     drawPlayer(p);
@@ -944,7 +900,7 @@
   //  Init
   // ================================================================
   resizeCanvas();
-  startNewConstellation();
+  initSkyStars();
 
   </script>
 </body>
