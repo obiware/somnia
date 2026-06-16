@@ -128,7 +128,7 @@
     SCROLL_SPEED_END:    75,      // at t = TRANSITION_DURATION
 
     // ── Gate spawn interval (seconds between gates) ──────────────
-    GATE_INTERVAL_START: 2,       // at t = 0  ← easily tunable
+    GATE_INTERVAL_START: 2.9,     // at t = 0  (−30% vs original 2s)
     GATE_INTERVAL_END:   8,       // at t = TRANSITION_DURATION
 
     // ── Gate opening width (fraction of canvas width) ────────────
@@ -164,16 +164,18 @@
     RAIN_GAIN_END:      0.12,
 
     // ── Audio: bell ──────────────────────────────────────────────
-    BELL_GAIN_START:  0.80,
-    BELL_GAIN_END:    0.44,
-    BELL_RATE_START:  1.00,       // pitch at t = 0
-    BELL_RATE_END:    0.72,       // deeper bell pitch as time passes
-    BELL_LOWPASS_START: 3200,
-    BELL_LOWPASS_END:    900,
-    BELL_REVERB_MIX_START: 0.10,
-    BELL_REVERB_MIX_END:   0.36,
+    BELL_GAIN_START:  0.54,       // −33% of 0.80
+    BELL_GAIN_END:    0.30,       // −33% of 0.44
+    BELL_RATE_START:  0.72,       // pitch shifted down — more grave from the start
+    BELL_RATE_END:    0.45,       // very deep at end of transition
+    BELL_LOWPASS_START: 2000,     // darker from the start
+    BELL_LOWPASS_END:    600,
+    BELL_REVERB_MIX_START: 0.18,
+    BELL_REVERB_MIX_END:   0.50,
     BELL_START_OFFSET:     0.0,
-    BELL_PLAY_WINDOW:      3.8,
+    BELL_PLAY_WINDOW:      4.5,
+    BELL_FADEOUT_START:    2.0,   // seconds after bell start when fade begins
+    BELL_FADEOUT_DURATION: 2.5,   // duration of the fade-out ramp
     PAN_CURVE_EXP:    0.65,       // < 1 exaggerates stereo separation near edges
 
     // ── Haptic phase thresholds (as fraction of TRANSITION_DURATION)
@@ -424,46 +426,58 @@
   function playBell(pan, p) {
     if (!bellAudioEl) return;
 
-    const rate = lerp(CONFIG.BELL_RATE_START, CONFIG.BELL_RATE_END, p);
-    const wet = lerp(CONFIG.BELL_REVERB_MIX_START, CONFIG.BELL_REVERB_MIX_END, p);
-
-    const maxPlayable = Math.max(0.2, bellAudioEl.duration - CONFIG.BELL_START_OFFSET || CONFIG.BELL_PLAY_WINDOW);
-    const playDuration = Math.min(CONFIG.BELL_PLAY_WINDOW, maxPlayable);
-    const adjustedDurationMs = (playDuration / Math.max(0.1, rate)) * 1000;
+    const rate     = lerp(CONFIG.BELL_RATE_START, CONFIG.BELL_RATE_END, p);
+    const wet      = lerp(CONFIG.BELL_REVERB_MIX_START, CONFIG.BELL_REVERB_MIX_END, p);
+    const gainPeak = lerp(CONFIG.BELL_GAIN_START, CONFIG.BELL_GAIN_END, p);
 
     if (audioRoutingReady && audioCtx && audioCtx.state !== 'suspended' && bellPanner) {
-      bellPanner.pan.setValueAtTime(clamp(pan, -1, 1), audioCtx.currentTime);
-      bellFilter.frequency.setValueAtTime(
-        lerp(CONFIG.BELL_LOWPASS_START, CONFIG.BELL_LOWPASS_END, p),
-        audioCtx.currentTime
-      );
-      bellGain.gain.setValueAtTime(
-        lerp(CONFIG.BELL_GAIN_START, CONFIG.BELL_GAIN_END, p),
-        audioCtx.currentTime
-      );
-      bellWetGain.gain.setValueAtTime(wet, audioCtx.currentTime);
-      bellDryGain.gain.setValueAtTime(1 - wet * 0.82, audioCtx.currentTime);
+      const now = audioCtx.currentTime;
+
+      bellPanner.pan.setValueAtTime(clamp(pan, -1, 1), now);
+      bellFilter.frequency.setValueAtTime(lerp(CONFIG.BELL_LOWPASS_START, CONFIG.BELL_LOWPASS_END, p), now);
+      bellWetGain.gain.setValueAtTime(wet, now);
+      bellDryGain.gain.setValueAtTime(1 - wet * 0.82, now);
+
+      // Aggressive fade envelope: peak -> sustain -> ramp to silence
+      const fadeStart = now + CONFIG.BELL_FADEOUT_START;
+      const fadeEnd   = fadeStart + CONFIG.BELL_FADEOUT_DURATION;
+      bellGain.gain.cancelScheduledValues(now);
+      bellGain.gain.setValueAtTime(gainPeak, now);
+      bellGain.gain.setValueAtTime(gainPeak * 0.72, now + CONFIG.BELL_FADEOUT_START * 0.6);
+      bellGain.gain.linearRampToValueAtTime(0.0001, fadeEnd);
 
       bellAudioEl.pause();
       bellAudioEl.currentTime = CONFIG.BELL_START_OFFSET;
       bellAudioEl.playbackRate = rate;
       bellAudioEl.play().catch(() => {});
 
+      // Hard stop slightly after silence is reached
       if (bellStopTimer) clearTimeout(bellStopTimer);
+      const totalMs = (fadeEnd - now + 0.1) * 1000;
       bellStopTimer = setTimeout(() => {
         bellAudioEl.pause();
-      }, adjustedDurationMs);
+      }, totalMs);
       return;
     }
 
+    // Fallback (no Web Audio routing): use a one-shot cloned element with native volume fade
     const bellShot = new Audio(CONFIG.AUDIO_FILES.BELL);
     bellShot.currentTime = CONFIG.BELL_START_OFFSET;
     bellShot.playbackRate = rate;
-    bellShot.volume = Math.min(1, Math.max(0, lerp(CONFIG.BELL_GAIN_START, CONFIG.BELL_GAIN_END, p)));
+    bellShot.volume = gainPeak;
     bellShot.play().catch(() => {});
-    setTimeout(() => {
-      bellShot.pause();
-    }, adjustedDurationMs);
+
+    // Simulate fade: step volume down at intervals
+    const fadeSteps = 12;
+    const fadeStartMs = CONFIG.BELL_FADEOUT_START * 1000;
+    const fadeDurMs   = CONFIG.BELL_FADEOUT_DURATION * 1000;
+    for (let i = 0; i <= fadeSteps; i++) {
+      const t = i / fadeSteps;
+      setTimeout(() => {
+        if (!bellShot.paused) bellShot.volume = Math.max(0, gainPeak * (1 - t));
+      }, fadeStartMs + t * fadeDurMs);
+    }
+    setTimeout(() => { bellShot.pause(); }, (CONFIG.BELL_FADEOUT_START + CONFIG.BELL_FADEOUT_DURATION + 0.1) * 1000);
   }
 
 
