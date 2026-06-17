@@ -33,6 +33,7 @@ export class Game {
         this.runProgressBackground(tick);
         this.tempAddRandomStarToConstellation(tick);
         this.runConstellation(tick);
+        this.runPlayer(tick);
     }
 
     displayState(){
@@ -60,6 +61,7 @@ export class Game {
         const positionPlayer = new Point(this.config.PLAYER_X_SLOTS[1], this.config.PLAYER_Y_POSITION);
         this.state.player = new Player(positionPlayer, this.config.PLAYER_X_SLOTS, this.config.PLAYER_RADIUS);
         this.state.player.setListeners(this.ctx.canvas);
+       
     }   
 
     runProgressBackground(tick) {
@@ -106,10 +108,15 @@ export class Game {
         if (randomStar) {
             this.state.constellation.addStar(randomStar);
         }
+        this.state.player.setSuccess(this.config.PLAYER_LIFETIME_SUCCESS_TICKS);
     }
 
     displayPlayer() {
         this.state.player.draw(this.ctx);
+    }
+
+    runPlayer(tick) {
+        this.state.player.run();
     }
 
 

@@ -224,12 +224,14 @@ export class Player {
         this.mouseTouch = false;
         this.x_slots = x_slots // User can drag horizontally the cursor but once he release it, the cursor will snap to the closest slot
         this.radius = radius;
+        this.lifetimeSuccessTick = 0; // Counter for the success effect
+
     }
 
     setListeners (canvas) {
-        console.log("setListner", canvas);
+     
         canvas.addEventListener('mousedown', (e) => {
-            console.log("mousedown at", e.offsetX, e.offsetY);
+           
         
             this.dragging = true;
             this.dragOffsetX = e.offsetX - (this.position.x * canvas.width);
@@ -238,7 +240,7 @@ export class Player {
         });
 
         canvas.addEventListener('mousemove', (e) => {
-            console.log("mousemove at", e.offsetX, e.offsetY);
+            
             if (!this.dragging && !this.mouseTouch) return;
             let newX = e.offsetX - this.dragOffsetX;
             this.position.x = newX / canvas.width;
@@ -247,7 +249,7 @@ export class Player {
         });
 
         window.addEventListener('mouseup', () => {
-            console.log("mouseup");
+            
             this.dragging = false;
             this.mouseTouch = false;
             this.snapToClosestSlot();
@@ -294,15 +296,101 @@ export class Player {
         this.position.x = closestSlot;
     }
 
+    run() {
+        if (this.lifetimeSuccessTick > 0) {
+            this.lifetimeSuccessTick--;
+        }
+    }
+
+    setSuccess(lifetimeSuccessTicks) {
+        this.lifetimeSuccessTick = lifetimeSuccessTicks;
+    }
+
     draw(ctx) {
         ctx.save();
         const width = ctx.canvas.width;
         const height = ctx.canvas.height;
-       
-        ctx.fillStyle = "rgba(255, 255, 255, 0.8)";
+
+        let sizeMultiplier = 1.0;
+        let mainColor = "rgba(0, 180, 255, 1)";     // Bleu Néon par défaut
+        let innerColor = "rgba(100, 220, 255, 1)";  // Centre bleu clair
+        let glowIntensity = 0;
+
+        let isSuccess = this.lifetimeSuccessTick > 0;
+
+        if (isSuccess) {
+            // 1. Effet de rebond (scale) : gros flash au début qui se stabilise
+            // Utilise une décroissance exponentielle basée sur le temps du success
+            const pulse = Math.exp(-this.lifetimeSuccessTick * 0.1) * 0.4; // Ajoute jusqu'à +40% de taille
+            sizeMultiplier = 1.0 + pulse;
+
+            // 2. Changement de couleur vers le Vert Émeraude / Or
+            mainColor = "rgba(46, 204, 113, 1)";
+            innerColor = "rgba(238, 255, 120, 1)"; // Cœur presque jaune doré
+            
+            // 3. Activation du halo lumineux (Glow)
+            glowIntensity = Math.exp(-this.lifetimeSuccessTick * 0.05); // Le glow s'estompe doucement
+        }
+
+
+        const cx = this.position.x * width;
+        const cy = this.position.y * height;
+
+        const currentHeight = this.radius * sizeMultiplier;
+        const distanceToTop = (2 / 3) * currentHeight;
+        const distanceToBottom = (1 / 3) * currentHeight;
+        const halfBase = currentHeight / Math.sqrt(3); // Écartement horizontal (~0.577 * height)
+
+        // 2. Coordonnées des 3 sommets
+        const ax = cx;
+        const ay = cy - distanceToTop; // Sommet du haut
+
+        const bx = cx - halfBase;
+        const by = cy + distanceToBottom; // Sommet bas-gauche
+
+        const cx_point = cx + halfBase;
+        const cy_point = cy + distanceToBottom; // Sommet bas-droit
+
+            // ==========================================
+        // RENDER 1 : La Coque Principale (Arrondie)
+        // ==========================================
+        ctx.lineJoin = "round"; // C'est ICI qu'on arrondit les angles !
+        ctx.lineWidth = currentHeight * 0.15; // L'épaisseur de l'arrondi
+
+        if (glowIntensity > 0) {
+            ctx.shadowColor = mainColor;
+            ctx.shadowBlur = currentHeight * 0.5 * glowIntensity;
+        }
+
+        ctx.strokeStyle = mainColor;
+        ctx.fillStyle = "rgba(10, 20, 40, 0.8)";
+
+        // 3. Tracé dans le canvas
         ctx.beginPath();
-        ctx.arc(this.position.x * width, this.position.y * height, this.radius, 0, Math.PI * 2);
+        ctx.moveTo(ax, ay);         // On va au sommet du haut
+        ctx.lineTo(bx, by);         // Ligne vers le bas-gauche
+        ctx.lineTo(cx_point, cy_point); // Ligne vers le bas-droit
+        ctx.closePath();            // Ferme le triangle (ligne retour au sommet)
+
         ctx.fill();
+        ctx.stroke();
+
+        ctx.shadowBlur = 0; // On coupe le gros glow externe
+        ctx.lineWidth = currentHeight * 0.05;
+        ctx.strokeStyle = innerColor;
+        ctx.fillStyle = isSuccess ? innerColor : "rgba(255, 255, 255, 0.3)";
+
+        const innerScale = 0.4; // Taille du triangle interne (40% du grand)
+        ctx.beginPath();
+        ctx.moveTo(cx, cy - (distanceToTop * innerScale));
+        ctx.lineTo(cx - (halfBase * innerScale), cy + (distanceToBottom * innerScale));
+        ctx.lineTo(cx + (halfBase * innerScale), cy + (distanceToBottom * innerScale));
+        ctx.closePath();
+        
+        ctx.fill();
+        ctx.stroke();
+
         ctx.restore();
     }
+    
 }
