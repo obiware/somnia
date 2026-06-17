@@ -51,7 +51,7 @@
     #overlay {
       position: fixed;
       inset: 0;
-      background: rgba(3, 5, 18, 0.93);
+      background: rgba(30, 60, 114, 0.93);
       display: flex;
       flex-direction: column;
       align-items: center;
@@ -106,395 +106,55 @@
     <p>Tap anywhere to begin</p>
   </div>
 
-  <script>
+  <script type="module">
+
+
   'use strict';
+  import { Game } from './public/js/game.js';
+  
+  const TOTAL_GAME_TRANSITION_DURATION_SECONDS = 1*60; // 1 minute
+  const TICKS_PER_SECOND = 60;
+  
+  const INTERVAL_TICK_MS = 1000 / TICKS_PER_SECOND; // 60 FPS
 
-  // ================================================================
-  //  CONFIGURATION
-  //  All parameters are gathered here — safe to edit freely.
-  //  Changing TRANSITION_DURATION rescales all timed transitions.
-  // ================================================================
   const CONFIG = {
+     
+      BG_START_COLOR: [ 14, 18, 62], // [35, 60, 114],
+      BG_END_COLOR : [1,1,8],
+      SHINY_COLOR : [253, 204, 13],
+      
+      MAX_TICK : TOTAL_GAME_TRANSITION_DURATION_SECONDS * TICKS_PER_SECOND,
 
-    // ── Core timing ─────────────────────────────────────────────
-    TRANSITION_DURATION: 1200,    // seconds  (20 min → all transitions reach end state)
-                                  // The game never stops after this; values stay fixed.
+      STARS_Y_MAX_SPACE : 0.60, // 33% of the screen height from the top is used to drawing constellation 
+      STARS_X_MAX_SPACE : 1, // 33% of the screen width from the left is used to drawing constellation
+      
+      NB_STARS : 75,
 
-    // ── Vertical layout ─────────────────────────────────────────
-    SKY_HEIGHT_FRACTION: 0.35,    // top 35% = star sky, bottom 65% = road
+      CONSTELLATION_MAX_LIFETIME_TICKS : 24 * TICKS_PER_SECOND, // 12 seconds 
+      CONSTELLATION_PATH_DURATION_TICKS : TICKS_PER_SECOND * 2, // speed of the constellation movement (in percentage of the screen width per tick)
+      
+      PLAYER_Y_POSITION : 0.92, // 92% of the screen height from the top is used to drawing player   
+      PLAYER_X_SLOTS : [0.125, 0.375, 0.625, 0.875], // 4 slots for the player to move horizontally
+      PLAYER_RADIUS : 18 //pixels
+    }  
 
-    // ── Road scroll speed (px / second) ─────────────────────────
-    SCROLL_SPEED_START:  180,     // at t = 0 (-30% vs 255, -40% vs original 300)
-    SCROLL_SPEED_END:    75,      // at t = TRANSITION_DURATION
-
-    // ── Gate spawn interval (seconds between gates) ──────────────
-    GATE_INTERVAL_START: 2.9,     // at t = 0  (−30% vs original 2s)
-    GATE_INTERVAL_END:   8,       // at t = TRANSITION_DURATION
-
-    // ── Gate opening width (fraction of canvas width) ────────────
-    GATE_GAP_START: 0.34,         // at t = 0  (reduced gap)
-    GATE_GAP_END:   0.15,         // at t = TRANSITION_DURATION (narrow, centred)
-
-    // ── Gate centre X spread (fraction of half-screen offset) ────
-    GATE_SPREAD_START: 0.82,      // at t = 0  (far left / right)
-    GATE_SPREAD_END:   0.07,      // at t = TRANSITION_DURATION (nearly centred)
-
-    PILLAR_WIDTH:  14,            // px
-    PILLAR_HEIGHT: 92,            // px
-
-    // ── Player ───────────────────────────────────────────────────
-    PLAYER_RADIUS:     18,        // px
-    PLAYER_Y_FRACTION: 0.86,      // lower on screen (about 14% from bottom)
-
-    // ── Sky stars ────────────────────────────────────────────────
-    SKY_STAR_COUNT:    110,        // total persistent stars in the sky
-    SKY_GLOW_DECAY:    0.50,       // how fast a gate-brightened star fades (per sec)
-    SKY_GLOW_BOOST:    1.0,        // glow intensity when a gate is passed (0-1)
-
-    // ── Audio files (place these in public/audio/) ───────────────
-    AUDIO_FILES: {
-      RAIN: 'public/audio/rain_loop.mp3',
-      BELL: 'public/audio/tibetan_bell.mp3',
-    },
-
-    // ── Audio: rain ──────────────────────────────────────────────
-    RAIN_FILTER_START: 3200,      // lowpass cutoff Hz at t = 0
-    RAIN_FILTER_END:    400,      // lowpass cutoff Hz at t = TRANSITION_DURATION
-    RAIN_GAIN_START:    0.24,
-    RAIN_GAIN_END:      0.12,
-
-    // ── Audio: bell ──────────────────────────────────────────────
-    BELL_GAIN_START:  0.54,       // −33% of 0.80
-    BELL_GAIN_END:    0.30,       // −33% of 0.44
-    BELL_RATE_START:  0.72,       // pitch shifted down — more grave from the start
-    BELL_RATE_END:    0.45,       // very deep at end of transition
-    BELL_LOWPASS_START: 2000,     // darker from the start
-    BELL_LOWPASS_END:    600,
-    BELL_REVERB_MIX_START: 0.18,
-    BELL_REVERB_MIX_END:   0.50,
-    BELL_START_OFFSET:     0.0,
-    BELL_PLAY_WINDOW:      4.5,
-    BELL_FADEOUT_START:    2.0,   // seconds after bell start when fade begins
-    BELL_FADEOUT_DURATION: 2.5,   // duration of the fade-out ramp
-    PAN_SATURATE_AT:  0.66,       // gate position (fraction of half-screen) that maps to pan ±1
-    BELL_MIN_RETRIGGER: 1.8,       // min seconds between bell triggers to avoid choppy overlaps
-
-    // ── Haptic phase thresholds (as fraction of TRANSITION_DURATION)
-    HAPTIC_PHASE1_FRAC: 2 / 20,   // strong tap until this fraction of total time
-    HAPTIC_PHASE2_FRAC: 5 / 20,   // soft tap until this fraction; silent after
-
-    // ── Background colour key-frames [R, G, B] ───────────────────
-    // Mapped to progress breakpoints: 0  →  P1  →  P2  →  0.75  →  1.0
-    BG_START: [ 14, 18, 62],      // t=0         : clear dark-blue starry sky
-    BG_P1:    [ 10, 14, 52],      // progress=0.1: slightly deeper blue  (≈ 2 min)
-    BG_P2:    [  5,  8, 40],      // progress=0.25: deep night blue  (≈ 5 min)
-    BG_P3:    [  2,  4, 20],      // progress=0.75: very dark deep blue
-    BG_END:   [  1,  1,  8],      // progress=1.0 : near-black space
-  };
-
-  // ── Phase breakpoints in progress-space (derived, don't edit) ──
-  const P1 = 2  / 20;   // 0.100
-  const P2 = 5  / 20;   // 0.250
-  const P3 = 15 / 20;   // 0.750
-
-  // ── Haptic thresholds in absolute seconds ───────────────────────
-  const HAPTIC_END1 = CONFIG.TRANSITION_DURATION * CONFIG.HAPTIC_PHASE1_FRAC;
-  const HAPTIC_END2 = CONFIG.TRANSITION_DURATION * CONFIG.HAPTIC_PHASE2_FRAC;
-
-
+  
+  var running = false;
   // ================================================================
   //  Canvas
   // ================================================================
   const canvas = document.getElementById('c');
   const ctx    = canvas.getContext('2d');
 
+  const game = new Game(CONFIG, ctx, canvas.width, canvas.height);
+
   function resizeCanvas() {
     canvas.width  = window.innerWidth;
     canvas.height = window.innerHeight;
-    player.x = canvas.width / 2;
   }
   window.addEventListener('resize', resizeCanvas);
 
 
-  // ================================================================
-  //  Game state
-  // ================================================================
-  let running       = false;
-  let timeElapsed   = 0;
-  let lastTimestamp = null;
-  let soundEnabled  = false;
-
-  let roadOffset        = 0;
-  let gates             = [];
-  let timeSinceLastGate = 9999;   // trigger first spawn immediately
-
-  // Sky star population
-  const skyStars = [];
-  const starConnections = [];
-  let lastBoostedStarIdx = -1;
-
-
-  // ================================================================
-  //  Player
-  // ================================================================
-  const player = {
-    x: 0,
-    dragging:    false,
-    touchId:     null,
-    dragOffsetX: 0,
-  };
-
-
-  // ================================================================
-  //  Utility helpers
-  // ================================================================
-  function lerp(a, b, t)       { return a + (b - a) * t; }
-  function clamp(v, lo, hi)    { return v < lo ? lo : v > hi ? hi : v; }
-  function getProgress()       { return Math.min(timeElapsed / CONFIG.TRANSITION_DURATION, 1); }
-  function getRoadTop()        { return canvas.height * CONFIG.SKY_HEIGHT_FRACTION; }
-  function getRoadHeight()     { return canvas.height - getRoadTop(); }
-
-  function getScrollSpeed(p)   { return lerp(CONFIG.SCROLL_SPEED_START,   CONFIG.SCROLL_SPEED_END,   p); }
-  function getGateInterval(p)  { return lerp(CONFIG.GATE_INTERVAL_START,  CONFIG.GATE_INTERVAL_END,  p); }
-  function getGateGap(p)       { return lerp(CONFIG.GATE_GAP_START,       CONFIG.GATE_GAP_END,       p) * canvas.width; }
-  function getGateSpread(p)    { return lerp(CONFIG.GATE_SPREAD_START,    CONFIG.GATE_SPREAD_END,    p); }
-
-  function getBgColor(p) {
-    let r, g, b;
-    if (p < P1) {
-      const t = p / P1;
-      r = lerp(CONFIG.BG_START[0], CONFIG.BG_P1[0], t);
-      g = lerp(CONFIG.BG_START[1], CONFIG.BG_P1[1], t);
-      b = lerp(CONFIG.BG_START[2], CONFIG.BG_P1[2], t);
-    } else if (p < P2) {
-      const t = (p - P1) / (P2 - P1);
-      r = lerp(CONFIG.BG_P1[0], CONFIG.BG_P2[0], t);
-      g = lerp(CONFIG.BG_P1[1], CONFIG.BG_P2[1], t);
-      b = lerp(CONFIG.BG_P1[2], CONFIG.BG_P2[2], t);
-    } else if (p < P3) {
-      const t = (p - P2) / (P3 - P2);
-      r = lerp(CONFIG.BG_P2[0], CONFIG.BG_P3[0], t);
-      g = lerp(CONFIG.BG_P2[1], CONFIG.BG_P3[1], t);
-      b = lerp(CONFIG.BG_P2[2], CONFIG.BG_P3[2], t);
-    } else {
-      const t = (p - P3) / (1 - P3);
-      r = lerp(CONFIG.BG_P3[0], CONFIG.BG_END[0], t);
-      g = lerp(CONFIG.BG_P3[1], CONFIG.BG_END[1], t);
-      b = lerp(CONFIG.BG_P3[2], CONFIG.BG_END[2], t);
-    }
-    return [Math.round(r), Math.round(g), Math.round(b)];
-  }
-
-
-  // ================================================================
-  //  Audio (Web Audio API + external files in public/audio)
-  // ================================================================
-  let audioCtx        = null;
-  let rainFilter      = null;
-  let rainGain        = null;
-  let rainAudioEl     = null;
-  let bellAudioEl     = null;
-  let bellPanner      = null;
-  let bellFilter      = null;
-  let bellGain        = null;
-  let bellDryGain     = null;
-  let bellWetGain     = null;
-  let bellConvolver   = null;
-  let bellStopTimer     = null;
-  let bellLastTriggerAt = -999;
-  let audioRoutingReady = false;
-  let audioReady        = false;
-
-  function createImpulseResponse(ctx, durationSec, decay) {
-    const length = Math.max(1, Math.floor(ctx.sampleRate * durationSec));
-    const impulse = ctx.createBuffer(2, length, ctx.sampleRate);
-    for (let ch = 0; ch < 2; ch++) {
-      const data = impulse.getChannelData(ch);
-      for (let i = 0; i < length; i++) {
-        const t = i / length;
-        data[i] = (Math.random() * 2 - 1) * Math.pow(1 - t, decay);
-      }
-    }
-    return impulse;
-  }
-
-  function initAudio() {
-    if (audioReady) return;
-    try {
-      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    } catch {
-      audioCtx = null;
-    }
-
-    rainAudioEl = new Audio(CONFIG.AUDIO_FILES.RAIN);
-    rainAudioEl.loop = true;
-    rainAudioEl.preload = 'auto';
-    rainAudioEl.volume = 1;
-    rainAudioEl.playsInline = true;
-
-    bellAudioEl = new Audio(CONFIG.AUDIO_FILES.BELL);
-    bellAudioEl.preload = 'auto';
-    bellAudioEl.volume = 1;
-    bellAudioEl.playsInline = true;
-
-    if (audioCtx) {
-      try {
-        rainFilter = audioCtx.createBiquadFilter();
-        rainFilter.type            = 'lowpass';
-        rainFilter.frequency.value = CONFIG.RAIN_FILTER_START;
-        rainFilter.Q.value         = 0.7;
-
-        rainGain = audioCtx.createGain();
-        rainGain.gain.value = 0;           // start muted; enabled by toggle
-
-        bellConvolver = audioCtx.createConvolver();
-        bellConvolver.buffer = createImpulseResponse(audioCtx, 2.8, 3.0);
-
-        bellPanner = audioCtx.createStereoPanner();
-        bellFilter = audioCtx.createBiquadFilter();
-        bellFilter.type = 'lowpass';
-        bellGain = audioCtx.createGain();
-        bellDryGain = audioCtx.createGain();
-        bellWetGain = audioCtx.createGain();
-
-        const rainSrc = audioCtx.createMediaElementSource(rainAudioEl);
-        rainSrc.connect(rainFilter);
-        rainFilter.connect(rainGain);
-        rainGain.connect(audioCtx.destination);
-
-        const bellSrc = audioCtx.createMediaElementSource(bellAudioEl);
-        bellSrc.connect(bellFilter);
-        bellFilter.connect(bellGain);
-        bellGain.connect(bellDryGain);
-        bellGain.connect(bellConvolver);
-        bellConvolver.connect(bellWetGain);
-        bellDryGain.connect(bellPanner);
-        bellWetGain.connect(bellPanner);
-        bellPanner.connect(audioCtx.destination);
-
-        audioRoutingReady = true;
-      } catch {
-        audioRoutingReady = false;
-      }
-    }
-
-    audioReady = true;
-  }
-
-  function setSoundEnabled(enabled) {
-    soundEnabled = enabled;
-    document.getElementById('soundBtn').textContent = enabled ? '🔊' : '🔇';
-
-    if (enabled && !audioReady) initAudio();
-    if (!audioReady) return;
-
-    if (enabled) {
-      if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume().catch(() => {});
-      if (audioRoutingReady && rainGain && audioCtx) {
-        rainGain.gain.setTargetAtTime(CONFIG.RAIN_GAIN_START, audioCtx.currentTime, 0.6);
-      } else if (rainAudioEl) {
-        rainAudioEl.volume = CONFIG.RAIN_GAIN_START;
-      }
-      if (rainAudioEl) {
-        rainAudioEl.play().catch(() => {});
-      }
-    } else {
-      if (audioRoutingReady && rainGain && audioCtx) {
-        rainGain.gain.setTargetAtTime(0, audioCtx.currentTime, 0.6);
-      } else if (rainAudioEl) {
-        rainAudioEl.volume = 0;
-      }
-      if (rainAudioEl) rainAudioEl.pause();
-    }
-  }
-
-  function updateRainFilter(p) {
-    if (audioRoutingReady && rainFilter && audioCtx) {
-      rainFilter.frequency.setValueAtTime(
-        lerp(CONFIG.RAIN_FILTER_START, CONFIG.RAIN_FILTER_END, p),
-        audioCtx.currentTime
-      );
-      if (soundEnabled && rainGain) {
-        rainGain.gain.setValueAtTime(
-          lerp(CONFIG.RAIN_GAIN_START, CONFIG.RAIN_GAIN_END, p),
-          audioCtx.currentTime
-        );
-      }
-    } else if (soundEnabled && rainAudioEl) {
-      rainAudioEl.volume = lerp(CONFIG.RAIN_GAIN_START, CONFIG.RAIN_GAIN_END, p);
-    }
-  }
-
-  function playBell(pan, p) {
-    // ── Bell sound disabled for now — uncomment the block below to re-enable ──
-    //
-    // const bellShot = new Audio(CONFIG.AUDIO_FILES.BELL);
-    // bellShot.currentTime = 0;
-    // bellShot.volume = 0.7;
-    // bellShot.play().catch(() => {});
-  }
-
-
-  // ================================================================
-  //  Haptic
-  // ================================================================
-  function triggerHaptic() {
-    if (!navigator.vibrate) return;
-    if (timeElapsed < HAPTIC_END1)      navigator.vibrate([40]);
-    else if (timeElapsed < HAPTIC_END2) navigator.vibrate([20]);
-    // silent after HAPTIC_END2
-  }
-
-
-  // ================================================================
-  //  Input — touch (primary) + mouse (desktop fallback)
-  // ================================================================
-  canvas.addEventListener('touchstart', e => {
-    e.preventDefault();
-    if (player.dragging) return;
-    const t = e.changedTouches[0];
-    player.dragging    = true;
-    player.touchId     = t.identifier;
-    player.dragOffsetX = t.clientX - player.x;
-  }, { passive: false });
-
-  canvas.addEventListener('touchmove', e => {
-    e.preventDefault();
-    for (const t of e.changedTouches) {
-      if (t.identifier !== player.touchId) continue;
-      player.x = clamp(
-        t.clientX - player.dragOffsetX,
-        CONFIG.PLAYER_RADIUS,
-        canvas.width - CONFIG.PLAYER_RADIUS
-      );
-    }
-  }, { passive: false });
-
-  canvas.addEventListener('touchend', e => {
-    for (const t of e.changedTouches) {
-      if (t.identifier === player.touchId) {
-        player.dragging = false;
-        player.touchId  = null;
-      }
-    }
-  });
-
-  // Mouse
-  let _mdown = false;
-  canvas.addEventListener('mousedown', e => {
-    _mdown = true;
-    player.dragging    = true;
-    player.dragOffsetX = e.clientX - player.x;
-  });
-  canvas.addEventListener('mousemove', e => {
-    if (!_mdown) return;
-    player.x = clamp(
-      e.clientX - player.dragOffsetX,
-      CONFIG.PLAYER_RADIUS,
-      canvas.width - CONFIG.PLAYER_RADIUS
-    );
-  });
-  window.addEventListener('mouseup', () => { _mdown = false; player.dragging = false; });
 
   // Sound toggle
   document.getElementById('soundBtn').addEventListener('click', e => {
@@ -503,411 +163,38 @@
   });
 
 
+  function runGame() {
+    var tick = 0;
+    setInterval(() => {
+      if (running) {
+        tick++;
+        game.run(tick);
+      }
+    }, INTERVAL_TICK_MS);
+  }
+
   // ================================================================
   //  Start overlay
   // ================================================================
   document.getElementById('overlay').addEventListener('click', () => {
     // Request fullscreen (needs user gesture)
-    const el  = document.documentElement;
-    const req = el.requestFullscreen || el.webkitRequestFullscreen || el.mozRequestFullScreen;
-    if (req) req.call(el).catch(() => {});
-
-    // Bootstrap audio context (needs user gesture)
-    initAudio();
+    // const el  = document.documentElement;
+    // const req = el.requestFullscreen || el.webkitRequestFullscreen || el.mozRequestFullScreen;
+    // if (req) req.call(el).catch(() => {});
 
     document.getElementById('overlay').style.display = 'none';
     running = true;
-    requestAnimationFrame(gameLoop);
+    runGame();
+
+
   }, { once: true });
-
-
-  // ================================================================
-  //  Gate spawning
-  // ================================================================
-  function spawnGate(p) {
-    const halfW   = canvas.width / 2;
-    const gapWidth = getGateGap(p);
-    const spread  = getGateSpread(p);
-
-    const idealMin = halfW - halfW * spread;
-    const idealMax = halfW + halfW * spread;
-    const sideMargin = CONFIG.PILLAR_WIDTH + gapWidth / 2 + 8;
-    const spawnMin = Math.max(sideMargin, idealMin);
-    const spawnMax = Math.min(canvas.width - sideMargin, idealMax);
-    const centerX = spawnMin < spawnMax
-      ? lerp(spawnMin, spawnMax, Math.random())
-      : halfW;
-
-    gates.push({
-      x:        centerX,
-      y:        getRoadTop() - CONFIG.PILLAR_HEIGHT - 8,
-      gapWidth,
-      panMinX:  spawnMin,
-      panMaxX:  spawnMax,
-      checked:  false,
-    });
-  }
-
-
-  // ================================================================
-  //  Sky star system
-  // ================================================================
-  function initSkyStars() {
-    skyStars.length = 0;
-    for (let i = 0; i < CONFIG.SKY_STAR_COUNT; i++) {
-      skyStars.push({
-        xf:          Math.random(),
-        yf:          Math.random(),
-        r:           Math.random() * 1.5 + 0.5,
-        baseOpacity: Math.random() * 0.45 + 0.12,
-        twSpeed:     Math.random() * 0.7 + 0.15,
-        twOffset:    Math.random() * Math.PI * 2,
-        glow:        0,
-        glowDecay:   CONFIG.SKY_GLOW_DECAY * (0.75 + Math.random() * 0.5),
-      });
-    }
-  }
-
-  function boostRandomStar() {
-    if (!skyStars.length) return;
-    const idx = Math.floor(Math.random() * skyStars.length);
-    skyStars[idx].glow = CONFIG.SKY_GLOW_BOOST;
-
-    if (lastBoostedStarIdx >= 0 && lastBoostedStarIdx !== idx) {
-      starConnections.push({
-        x1: skyStars[lastBoostedStarIdx].xf,
-        y1: skyStars[lastBoostedStarIdx].yf,
-        x2: skyStars[idx].xf,
-        y2: skyStars[idx].yf,
-        opacity: 0.55,
-        age: 0,
-      });
-    }
-    lastBoostedStarIdx = idx;
-  }
-
-  function drawStarShape(x, y, r, opacity, glow) {
-    const totalGlow = glow;
-    const spikeFactor = 1 + totalGlow * 1.8;
-
-    // Outer glow halo
-    const haloR = r * (5 + totalGlow * 12);
-    const haloGrd = ctx.createRadialGradient(x, y, 0, x, y, haloR);
-    const haloOp = Math.min(1, opacity * 0.45 + totalGlow * 0.65);
-    haloGrd.addColorStop(0,   `rgba(200, 220, 255, ${haloOp})`);
-    haloGrd.addColorStop(0.4, `rgba(170, 200, 255, ${haloOp * 0.35})`);
-    haloGrd.addColorStop(1,   'rgba(140, 180, 255, 0)');
-    ctx.fillStyle = haloGrd;
-    ctx.beginPath();
-    ctx.arc(x, y, haloR, 0, Math.PI * 2);
-    ctx.fill();
-
-    // 4-pointed spike shape
-    const outer = r * spikeFactor * 2.8;
-    const inner = r * 0.18;
-    ctx.fillStyle = `rgba(235, 245, 255, ${Math.min(1, opacity + totalGlow * 0.5)})`;
-    ctx.beginPath();
-    ctx.moveTo(x,         y - outer);
-    ctx.bezierCurveTo(x + inner, y - inner, x + inner, y - inner, x + outer, y);
-    ctx.bezierCurveTo(x + inner, y + inner, x + inner, y + inner, x,         y + outer);
-    ctx.bezierCurveTo(x - inner, y + inner, x - inner, y + inner, x - outer, y);
-    ctx.bezierCurveTo(x - inner, y - inner, x - inner, y - inner, x,         y - outer);
-    ctx.closePath();
-    ctx.fill();
-
-    // Bright centre core
-    ctx.fillStyle = `rgba(255, 255, 255, ${Math.min(1, opacity + totalGlow * 0.7)})`;
-    ctx.beginPath();
-    ctx.arc(x, y, r * 0.6, 0, Math.PI * 2);
-    ctx.fill();
-  }
-
-
-  // ================================================================
-  //  Draw: sky + stars
-  // ================================================================
-  function drawSky(dt, p, tSec) {
-    const roadTop = getRoadTop();
-    const [r, g, b] = getBgColor(p);
-
-    // Full canvas dark base
-    ctx.fillStyle = 'rgb(2,3,10)';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-    // Sky gradient in top 35%
-    const skyGrad = ctx.createLinearGradient(0, 0, 0, roadTop);
-    skyGrad.addColorStop(0, `rgb(${Math.min(255, r + 18)},${Math.min(255, g + 24)},${Math.min(255, b + 30)})`);
-    skyGrad.addColorStop(1, `rgb(${r},${g},${b})`);
-    ctx.fillStyle = skyGrad;
-    ctx.fillRect(0, 0, canvas.width, roadTop);
-
-    // Horizon separator glow
-    ctx.fillStyle = 'rgba(150,180,255,0.06)';
-    ctx.fillRect(0, roadTop - 2, canvas.width, 2);
-
-    // Draw stars clipped to sky zone
-    ctx.save();
-    ctx.beginPath();
-    ctx.rect(0, 0, canvas.width, roadTop);
-    ctx.clip();
-
-    // Fade and draw connection lines between boosted stars
-    for (let i = starConnections.length - 1; i >= 0; i--) {
-      const cn = starConnections[i];
-      cn.age += dt;
-      cn.opacity = Math.max(0, 0.55 * (1 - cn.age / 9.0));
-      if (cn.opacity <= 0) { starConnections.splice(i, 1); continue; }
-
-      const lx1 = cn.x1 * canvas.width;
-      const ly1 = (0.05 + cn.y1 * 0.88) * roadTop;
-      const lx2 = cn.x2 * canvas.width;
-      const ly2 = (0.05 + cn.y2 * 0.88) * roadTop;
-
-      ctx.beginPath();
-      ctx.moveTo(lx1, ly1);
-      ctx.lineTo(lx2, ly2);
-      ctx.strokeStyle = `rgba(200, 220, 255, ${cn.opacity * 0.45})`;
-      ctx.lineWidth = 0.5;
-      ctx.stroke();
-    }
-
-    for (const s of skyStars) {
-      // Decay glow
-      s.glow = Math.max(0, s.glow - s.glowDecay * dt);
-
-      // Twinkle
-      const twinkle = Math.sin(tSec * s.twSpeed + s.twOffset) * 0.12;
-      const opacity = Math.max(0, s.baseOpacity + twinkle);
-
-      const sx = s.xf * canvas.width;
-      const sy = (0.05 + s.yf * 0.88) * roadTop;
-
-      drawStarShape(sx, sy, s.r, opacity, s.glow);
-    }
-
-    ctx.restore();
-  }
-
-
-  // ================================================================
-  //  Draw: road
-  // ================================================================
-  function drawRoad(dt, p) {
-    const speed = getScrollSpeed(p);
-    roadOffset  = (roadOffset + speed * dt) % 100;
-
-    const W  = canvas.width;
-    const roadTop = getRoadTop();
-    const H  = getRoadHeight();
-    const cx = W / 2;
-    const rw = W * 0.66;
-
-    // Road surface strip
-    const sg = ctx.createLinearGradient(cx - rw / 2, 0, cx + rw / 2, 0);
-    sg.addColorStop(0,    'rgba(4, 4, 14, 0)');
-    sg.addColorStop(0.1,  'rgba(5, 6, 16, 0.62)');
-    sg.addColorStop(0.9,  'rgba(5, 6, 16, 0.62)');
-    sg.addColorStop(1,    'rgba(4, 4, 14, 0)');
-    ctx.fillStyle = sg;
-    ctx.fillRect(cx - rw / 2, roadTop, rw, H);
-
-    // Edge lines
-    const edgeA = lerp(0.28, 0.08, p);
-    ctx.strokeStyle = `rgba(255,255,255,${edgeA})`;
-    ctx.lineWidth   = 1.5;
-    ctx.setLineDash([]);
-    ctx.beginPath();
-    ctx.moveTo(cx - rw / 2 + 16, roadTop);   ctx.lineTo(cx - rw / 2 + 16, roadTop + H);
-    ctx.moveTo(cx + rw / 2 - 16, roadTop);   ctx.lineTo(cx + rw / 2 - 16, roadTop + H);
-    ctx.stroke();
-
-    // Centre dashes
-    ctx.strokeStyle    = `rgba(255,255,255,${lerp(0.22, 0.06, p)})`;
-    ctx.lineWidth      = 2.5;
-    ctx.setLineDash([60, 40]);
-    ctx.lineDashOffset = -roadOffset;
-    ctx.beginPath();
-    ctx.moveTo(cx, roadTop);   ctx.lineTo(cx, roadTop + H);
-    ctx.stroke();
-    ctx.setLineDash([]);
-  }
-
-
-  // ================================================================
-  //  Draw: gates
-  // ================================================================
-  function updateAndDrawGates(dt, p) {
-    const speed   = getScrollSpeed(p);
-    const playerY = canvas.height * CONFIG.PLAYER_Y_FRACTION;
-    const roadTop = getRoadTop();
-
-    for (let i = gates.length - 1; i >= 0; i--) {
-      const g = gates[i];
-      g.y += speed * dt;
-
-      // Pass / miss detection (once per gate)
-      if (!g.checked) {
-        const gateMid = g.y + CONFIG.PILLAR_HEIGHT / 2;
-        if (Math.abs(gateMid - playerY) <= CONFIG.PLAYER_RADIUS) {
-          g.checked = true;
-          const pL = player.x - CONFIG.PLAYER_RADIUS;
-          const pR = player.x + CONFIG.PLAYER_RADIUS;
-          const gL = g.x - g.gapWidth / 2;
-          const gR = g.x + g.gapWidth / 2;
-
-          if (pL >= gL && pR <= gR) {
-            // Player passed through the gate
-            // Use the outermost pillar edge on the side of the gate center for pan.
-            // Centre right → right pillar outer edge; centre left → left pillar outer edge.
-            const centerNorm  = (g.x / canvas.width) * 2 - 1;
-            const outerEdgeX  = centerNorm >= 0
-              ? g.x + g.gapWidth / 2    // right pillar outer edge
-              : g.x - g.gapWidth / 2;   // left pillar outer edge
-            const rawNorm = (outerEdgeX / canvas.width) * 2 - 1;
-            const pan = clamp(rawNorm / CONFIG.PAN_SATURATE_AT, -1, 1);
-            if (soundEnabled) playBell(pan, p);
-            triggerHaptic();
-            boostRandomStar();
-          }
-          // On miss: nothing happens (no punishment)
-        }
-      }
-
-      if (g.y > canvas.height + CONFIG.PILLAR_HEIGHT + 60) { gates.splice(i, 1); continue; }
-
-      if (g.y + CONFIG.PILLAR_HEIGHT < roadTop) continue;
-
-      _drawGate(g, p);
-    }
-  }
-
-  function _drawGate(g, p) {
-    const gL = g.x - g.gapWidth / 2;
-    const gR = g.x + g.gapWidth / 2;
-    const leftPillarX = gL - CONFIG.PILLAR_WIDTH;
-    const rightPillarX = gR;
-
-    // Gate colour follows background phase
-    let cr, cg, cb, ca;
-    if (p < P1) {
-      const t = p / P1;
-      cr = 255; cg = Math.round(lerp(200, 160, t)); cb = Math.round(lerp(60, 80, t)); ca = 0.88;
-    } else if (p < P2) {
-      const t = (p - P1) / (P2 - P1);
-      cr = Math.round(lerp(255, 100, t));
-      cg = Math.round(lerp(160, 145, t));
-      cb = Math.round(lerp(80,  255, t));
-      ca = 0.78;
-    } else {
-      const t  = Math.min((p - P2) / (1 - P2), 1);
-      cr = 90; cg = 115; cb = 215; ca = lerp(0.55, 0.28, t);
-    }
-
-    const color = `rgba(${cr},${cg},${cb},${ca})`;
-    ctx.shadowBlur  = 12;
-    ctx.shadowColor = color;
-    ctx.fillStyle   = color;
-
-    ctx.fillRect(leftPillarX, g.y, CONFIG.PILLAR_WIDTH, CONFIG.PILLAR_HEIGHT);
-    ctx.fillRect(rightPillarX, g.y, CONFIG.PILLAR_WIDTH, CONFIG.PILLAR_HEIGHT);
-
-    // Inner edge highlights
-    ctx.shadowBlur  = 0;
-    ctx.strokeStyle = 'rgba(255,255,255,0.62)';
-    ctx.lineWidth   = 1.2;
-    ctx.beginPath();
-    ctx.moveTo(gL, g.y); ctx.lineTo(gL, g.y + CONFIG.PILLAR_HEIGHT);
-    ctx.moveTo(gR, g.y); ctx.lineTo(gR, g.y + CONFIG.PILLAR_HEIGHT);
-    ctx.stroke();
-    ctx.shadowBlur = 0;
-  }
-
-
-  // ================================================================
-  //  Draw: player orb
-  // ================================================================
-  function drawPlayer(p) {
-    const x = player.x;
-    const y = canvas.height * CONFIG.PLAYER_Y_FRACTION;
-    const r = CONFIG.PLAYER_RADIUS;
-
-    // Colour interpolation across phases
-    let cr, cg, cb;
-    if (p < P1) {
-      const t = p / P1;
-      cr = Math.round(lerp(255, 110, t));
-      cg = Math.round(lerp(210, 170, t));
-      cb = Math.round(lerp(70,  255, t));
-    } else {
-      const t = Math.min((p - P1) / (1 - P1), 1);
-      cr = Math.round(lerp(110, 80,  t));
-      cg = Math.round(lerp(170, 100, t));
-      cb = 255;
-    }
-
-    // Outer glow
-    const og = ctx.createRadialGradient(x, y, 0, x, y, r * 2.6);
-    og.addColorStop(0, `rgba(${cr},${cg},${cb},0.28)`);
-    og.addColorStop(1, `rgba(${cr},${cg},${cb},0)`);
-    ctx.fillStyle = og;
-    ctx.beginPath();
-    ctx.arc(x, y, r * 2.6, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Core orb
-    const cg2 = ctx.createRadialGradient(x - r * 0.28, y - r * 0.28, r * 0.08, x, y, r);
-    cg2.addColorStop(0,   'rgba(255,255,255,0.95)');
-    cg2.addColorStop(0.4, `rgba(${cr},${cg},${cb},0.85)`);
-    cg2.addColorStop(1,   `rgba(${cr},${cg},${cb},0.35)`);
-
-    ctx.shadowBlur  = 22;
-    ctx.shadowColor = `rgba(${cr},${cg},${cb},0.7)`;
-    ctx.fillStyle   = cg2;
-    ctx.beginPath();
-    ctx.arc(x, y, r, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.shadowBlur = 0;
-  }
-
-
-  // ================================================================
-  //  Main game loop
-  // ================================================================
-  function gameLoop(ts) {
-    if (!running) return;
-    if (!lastTimestamp) lastTimestamp = ts;
-
-    const dt = Math.min((ts - lastTimestamp) / 1000, 0.05);  // cap at 50 ms
-    lastTimestamp = ts;
-    timeElapsed  += dt;
-
-    const p = getProgress();
-
-    // Spawn gates
-    timeSinceLastGate += dt;
-    if (timeSinceLastGate >= getGateInterval(p)) {
-      spawnGate(p);
-      timeSinceLastGate = 0;
-    }
-
-    // Update audio filter
-    if (soundEnabled && rainFilter) updateRainFilter(p);
-
-    // Render
-    drawSky(dt, p, ts / 1000);
-    drawRoad(dt, p);
-    updateAndDrawGates(dt, p);
-    drawPlayer(p);
-
-    requestAnimationFrame(gameLoop);
-  }
 
 
   // ================================================================
   //  Init
   // ================================================================
   resizeCanvas();
-  initSkyStars();
+
 
   </script>
 </body>

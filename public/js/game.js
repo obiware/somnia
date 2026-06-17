@@ -1,10 +1,11 @@
-import {calcProgress, lerp, PerspectiveEngine} from './utils.js';
-import {Lane, Star, StarCollection, Constellation} from './elements.js';
+import {calcProgress, lerp, PerspectiveEngine, Point} from './utils.js';
+import {Lane, Star, StarCollection, Constellation, Player} from './elements.js';
 
  var GameState = {
     background_color: [0, 0, 0],
     star_collection: null,
     constellation: null,
+    player: null,
 }
 
 
@@ -42,6 +43,7 @@ export class Game {
         this.displayConstellation();
 
         this.perspectiveEngine.drawPerspectives(this.ctx);
+        this.displayPlayer();
         
     }
 
@@ -54,6 +56,10 @@ export class Game {
             this.config.STARS_Y_MAX_SPACE,
             this.perspectiveEngine);
         this.state.constellation = new Constellation(this.config.CONSTELLATION_MAX_LIFETIME_TICKS, this.config.CONSTELLATION_PATH_DURATION_TICKS);
+        
+        const positionPlayer = new Point(this.config.PLAYER_X_SLOTS[1], this.config.PLAYER_Y_POSITION);
+        this.state.player = new Player(positionPlayer, this.config.PLAYER_X_SLOTS, this.config.PLAYER_RADIUS);
+        this.state.player.setListeners(this.ctx.canvas);
     }   
 
     runProgressBackground(tick) {
@@ -100,6 +106,10 @@ export class Game {
         if (randomStar) {
             this.state.constellation.addStar(randomStar);
         }
+    }
+
+    displayPlayer() {
+        this.state.player.draw(this.ctx);
     }
 
 

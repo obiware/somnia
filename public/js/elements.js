@@ -213,3 +213,96 @@ export class Constellation {
     }
 
 }
+
+export class Player {
+
+    constructor(position, x_slots, radius) {
+        this.position = position;
+        this.dragging = false;
+        this.dragOffsetX = 0;
+        this.touchId = null; // To track the touch identifier
+        this.mouseTouch = false;
+        this.x_slots = x_slots // User can drag horizontally the cursor but once he release it, the cursor will snap to the closest slot
+        this.radius = radius;
+    }
+
+    setListeners (canvas) {
+        console.log("setListner", canvas);
+        canvas.addEventListener('mousedown', (e) => {
+            console.log("mousedown at", e.offsetX, e.offsetY);
+        
+            this.dragging = true;
+            this.dragOffsetX = e.offsetX - (this.position.x * canvas.width);
+            this.mouseTouch = true;
+          
+        });
+
+        canvas.addEventListener('mousemove', (e) => {
+            console.log("mousemove at", e.offsetX, e.offsetY);
+            if (!this.dragging && !this.mouseTouch) return;
+            let newX = e.offsetX - this.dragOffsetX;
+            this.position.x = newX / canvas.width;
+            this.position.x = Math.max(0, Math.min(1, this.position.x)); // Clamp between 0 and 1
+            
+        });
+
+        window.addEventListener('mouseup', () => {
+            console.log("mouseup");
+            this.dragging = false;
+            this.mouseTouch = false;
+            this.snapToClosestSlot();
+        });
+
+        canvas.addEventListener('touchstart', e => {
+            e.preventDefault();
+            if (this.dragging) return;
+            const t = e.changedTouches[0];
+            this.dragging    = true;
+            this.touchId     = t.identifier;
+            this.dragOffsetX = t.clientX - this.position.x * canvas.width;
+        }, { passive: false });
+
+        canvas.addEventListener('touchmove', e => {
+            e.preventDefault();
+            for (const t of e.changedTouches) {
+            if (t.identifier !== this.touchId) continue;
+            this.position.x = (t.clientX - this.dragOffsetX) / canvas.width;
+            this.position.x = Math.max(0, Math.min(1, this.position.x)); // Clamp between 0 and 1
+            }
+        }, { passive: false });
+
+        canvas.addEventListener('touchend', e => {
+            for (const t of e.changedTouches) {
+            if (t.identifier === this.touchId) {
+                this.dragging = false;
+                this.touchId  = null;
+                 this.snapToClosestSlot();
+            }
+            }
+        });
+
+
+
+
+    }
+
+    snapToClosestSlot() {
+        let closestSlot = this.x_slots.reduce((prev, curr) => {
+            return (Math.abs(curr - this.position.x) < Math.abs(prev - this.position.x) ? curr : prev);
+        });
+
+        this.position.x = closestSlot;
+    }
+
+    draw(ctx) {
+        ctx.save();
+        const width = ctx.canvas.width;
+        const height = ctx.canvas.height;
+       
+        ctx.fillStyle = "rgba(255, 255, 255, 0.8)";
+        ctx.beginPath();
+        ctx.arc(this.position.x * width, this.position.y * height, this.radius, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+    }
+}
