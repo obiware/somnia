@@ -103,7 +103,7 @@ export class StarCollection {
 
             if (this.perspectiveEngine.isOnTheWay(x,y)){continue;}
 
-            const size = Math.random() * 4 + 0.5;
+            const size = Math.random() * 1.5 + 0.7;
             const intensity = Math.random() * 0.5 + 0.5;
             const scale = Math.random() * 0.5 + 0.5;
             this.stars.push(new Star(new Point(x, y), size, intensity, scale));
@@ -135,7 +135,7 @@ class StarConnection {
         
     }
 
-    
+
     run() {
         
         this.lifeTime_ticks--;

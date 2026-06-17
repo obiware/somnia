@@ -36,11 +36,13 @@ export class Game {
 
     displayState(){
         this.ctx.reset();
-
+        
         this.displayBackground();
         this.displayStars();
         this.displayConstellation();
+
         this.perspectiveEngine.drawPerspectives(this.ctx);
+        
     }
 
     initState() {
@@ -96,7 +98,6 @@ export class Game {
         
         const randomStar = this.state.star_collection.getRandomStar();
         if (randomStar) {
-            console.log("Adding star to constellation: ", randomStar);
             this.state.constellation.addStar(randomStar);
         }
     }

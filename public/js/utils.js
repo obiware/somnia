@@ -32,11 +32,18 @@ export function lerp(a, b, t)   {
 export class PerspectiveEngine {
     constructor(originPoint, topLeftPoint, topRightPoint, bottomLeftPoint, bottomRightPoint) {
         this.origin = originPoint;
+        this.topLeftPoint = topLeftPoint;
+        this.topRightPoint = topRightPoint;
+        this.bottomLeftPoint = bottomLeftPoint;
+        this.bottomRightPoint = bottomRightPoint;
         this.lines = [];
         //this.lines.push(new Line(originPoint, topLeftPoint));
         //this.lines.push(new Line(originPoint, topRightPoint));
         this.lines.push(new Line(originPoint, bottomLeftPoint));
         this.lines.push(new Line(originPoint, bottomRightPoint));
+        
+
+    
     }
 
     isOnTheWay(x, y) { 
@@ -65,9 +72,13 @@ export class PerspectiveEngine {
     }
 
     drawPerspectives(ctx) {
+        ctx.save();
          let width = ctx.canvas.width;
          let height = ctx.canvas.height;
 
+        this.drawArrivedLines(ctx);
+        
+        
         for (let line of this.lines) {
             let gradient = ctx.createLinearGradient(
                 line.startPoint.x * width, 
@@ -88,5 +99,74 @@ export class PerspectiveEngine {
         
         }
 
+        
+        ctx.restore(); 
+
     }
+
+
+    drawArrivedLines(ctx) {
+        
+        const width = ctx.canvas.width;
+        const height = ctx.canvas.height;
+        
+        ctx.setLineDash([20, 10]);
+
+        // 2. Paramétrer le style de la ligne comme d'habitude
+        ctx.strokeStyle = "white";
+        ctx.lineWidth = 2;
+
+        // 3. Dessiner la ligne horizontale d'arrivée
+        ctx.beginPath();
+        ctx.moveTo(this.bottomLeftPoint.x * width + 0.05*width, this.bottomLeftPoint.y * height *0.95);
+        ctx.lineTo(this.bottomRightPoint.x * width - 0.05*width, this.bottomRightPoint.y * height*0.95);
+        ctx.stroke();
+
+
+        // Dessiner les 4 couloirs qui partent de l'origine.
+        
+
+
+        const couloirs = [new Point(0.20*width, this.bottomLeftPoint.y * height), new Point(0.5*width, this.bottomLeftPoint.y * height), new Point(0.80*width, this.bottomLeftPoint.y * height)];
+
+        for (let couloir of couloirs) {
+            
+            const projection = this.projectLineOfSight(this.origin, couloir, this.bottomLeftPoint.y * height);
+            
+            let gradient = ctx.createLinearGradient(
+                this.origin.x * width, 
+                this.origin.y * height, 
+                projection.x, 
+                height);
+            gradient.addColorStop(0, 'rgba(255, 255, 255, 0)');
+            gradient.addColorStop(1, 'rgba(255, 255, 255, 1)');
+            
+        
+            ctx.strokeStyle = gradient;
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(this.origin.x*width, this.origin.y * height);
+            ctx.lineTo(projection.x,  height);
+            ctx.stroke();
+        }
+    }
+
+    projectLineOfSight(A, B, targetY) {
+    // Sécurité : éviter la division par zéro si A et B ont le même Y
+    if (B.y === A.y) {
+        return { x: B.x, y: targetY };
+    }
+
+    // Calcul de la pente inverse (le ratio de décalage horizontal par pixel vertical)
+    const slopeX = (B.x - A.x) / (B.y - A.y);
+
+    // Calcul du nouveau X
+    const targetX = B.x + (targetY - B.y) * slopeX;
+
+    return {
+        x: targetX,
+        y: targetY
+    };
+}
+
 }  
