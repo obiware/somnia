@@ -108,7 +108,7 @@ export class StarCollection {
 
             if (this.perspectiveEngine.isOnTheWay(x,y)){continue;}
 
-            const size = Math.random() * 1.5 + 0.7;
+            const size = Math.random() * 2.5 + 1;
             const intensity = Math.random() * 0.5 + 0.5;
             const scale = Math.random() * 0.5 + 0.5;
             this.stars.push(new Star(new Point(x, y), size, intensity, scale));
@@ -339,8 +339,8 @@ export class Player {
        
         let cursorColor = "rgb(0, 0, 0)";     // Bleu Néon par défaut
         let innerColor = "rgb(18, 34, 207)";  // Centre bleu clair
-        let shadowColor = "rgba(254, 254, 254, 1)"; // Ombre noire semi-transparente
-        let shadowColorSuccess = "rgb(222, 130, 55)"; // Ombre dorée pour le succès
+        let shadowColor = "rgba(254, 254, 254, 0.8)"; // Ombre noire semi-transparente
+        let shadowColorSuccess = "rgba(254, 254, 254, 0.6 )"; // Ombre dorée pour le succès
         let isSuccess = this.lifetimeSuccessTick > 0;
 
         let pulse = 1;
@@ -405,16 +405,16 @@ export class Player {
         ctx.lineWidth = currentHeight * 0.15; // L'épaisseur de l'arrondi
         
         ctx.shadowColor = shadowColor; // Ombre noire semi-transparente
-        ctx.shadowBlur = 6;                    // Un léger flou pour faire réaliste
+        ctx.shadowBlur = 4;                    // Un léger flou pour faire réaliste
         ctx.shadowOffsetX = Math.sin(angle) * 6; 
         ctx.shadowOffsetY = Math.cos(angle) * 3; // Décalage vertical basé sur la rotation
 
 
         if (isSuccess) {
             ctx.shadowColor = shadowColorSuccess; // same yellowish as coin
-            ctx.shadowBlur = 6 - boostStretch * 1.2;
-            ctx.shadowOffsetX = 0;
-            ctx.shadowOffsetY = Math.cos(angle) * (6 + boostStretch * 0.1);
+            ctx.shadowBlur = 3 + boostStretch * 0.02;
+            ctx.shadowOffsetX = Math.sin(angle) * 6 - (boostStretch * 0.01);
+            ctx.shadowOffsetY = Math.cos(angle) * 6 + (boostStretch * 0.02);
         } 
 
         ctx.strokeStyle = cursorColor;
