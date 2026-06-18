@@ -22,7 +22,7 @@ export function getVector(pointA, pointB) {
 }
 
 export function lerp(a, b, t)   {
-    let delta = Math.trunc((b-a) * t);
+    let delta = (b-a) * t;
     return a + delta; 
 }
 

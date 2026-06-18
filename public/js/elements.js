@@ -508,7 +508,7 @@ export class CoinCollection {
     constructor(coinGenerator, coin_interval_ticks) {
         this.coinGenerator = coinGenerator;
         this.coin_interval_ticks = coin_interval_ticks;
-        this.ticks_since_last_coin = 0;
+        this.ticks_since_last_coin = coin_interval_ticks; // Initialize to allow immediate coin generation
         this.coins = [];
     }
 

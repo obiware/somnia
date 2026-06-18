@@ -3,6 +3,8 @@ import {Lane, Star, StarCollection, Constellation, Player, Coin, CoinGenerator, 
 
  var GameState = {
     background_color: [0, 0, 0],
+    current_coin_speed:0,
+    current_coin_interval_ticks:0,
     star_collection: null,
     constellation: null,
     player: null,
@@ -31,7 +33,7 @@ export class Game {
     }
 
     runState(tick) {
-        this.runProgressBackground(tick);
+        this.runProgress(tick);
         //this.tempAddRandomStarToConstellation(tick);
         this.runConstellation(tick);
         this.runPlayer(tick);
@@ -68,23 +70,40 @@ export class Game {
         //Generate four Point from the four COIN_SLOTS using PLAYER_Y_POSITION as y coordinate
         const coinTargets = this.config.COIN_SLOTS.map(x => new Point(x, this.config.PLAYER_Y_POSITION));
 
+        this.current_coin_speed = this.config.COIN_SPEED;
+        this.current_coin_interval_ticks = this.config.COIN_INTERVAL_TICKS;
+
         const coinGenerator = new CoinGenerator(
             this.perspectiveEngine.origin,
             coinTargets,
             this.config.COIN_RADIUS, 
-            this.config.COIN_SPEED, 
-            this.config.COIN_INTERVAL_TICKS);
-        this.state.coin_collection = new CoinCollection(coinGenerator, this.config.COIN_INTERVAL_TICKS);
+            this.current_coin_speed, 
+            this.current_coin_interval_ticks);
+        this.state.coin_collection = new CoinCollection(coinGenerator, this.current_coin_interval_ticks);
     }
 
-    runProgressBackground(tick) {
+    runProgress(tick) {
         if (tick > this.config.MAX_TICK) { return; }
 
         let progress = calcProgress(tick, this.config.MAX_TICK);
-        this.state.background_color[0] = lerp(this.config.BG_START_COLOR[0], this.config.BG_END_COLOR[0], progress);
-        this.state.background_color[1] = lerp(this.config.BG_START_COLOR[1], this.config.BG_END_COLOR[1], progress);
-        this.state.background_color[2] = lerp(this.config.BG_START_COLOR[2], this.config.BG_END_COLOR[2], progress);
         
+        this.state.background_color[0] = Math.trunc(lerp(this.config.BG_START_COLOR[0], this.config.BG_END_COLOR[0], progress));
+        this.state.background_color[1] = Math.trunc(lerp(this.config.BG_START_COLOR[1], this.config.BG_END_COLOR[1], progress));
+        this.state.background_color[2] = Math.trunc(lerp(this.config.BG_START_COLOR[2], this.config.BG_END_COLOR[2], progress));
+        
+        let result_lerp = lerp(this.config.COIN_SPEED, 
+            this.config.FINAL_COIN_SPEED, 
+            progress);
+        
+        
+        this.current_coin_speed = lerp(this.config.COIN_SPEED, this.config.FINAL_COIN_SPEED, progress);
+        this.current_coin_interval_ticks = lerp(this.config.COIN_INTERVAL_TICKS, this.config.FINAL_COIN_INTERVAL_TICKS, progress);
+        
+
+        
+        this.state.coin_collection.coinGenerator.speed = this.current_coin_speed;
+        this.state.coin_collection.coin_interval_ticks = this.current_coin_interval_ticks;
+
     }
 
     displayBackground() {
