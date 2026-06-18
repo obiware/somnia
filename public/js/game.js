@@ -188,7 +188,7 @@ export class Game {
         const dx = player.position.x - coin.current_position.x; // noramlized coordinates
         const dy = player.position.y - coin.current_position.y;
         const distance = Math.sqrt(dx * dx + dy * dy); // normalized distance
-        const combinedRadius = (player.radius + coin.radius) / (this.ctx.canvas.width*2);
+        const combinedRadius = (player.radius + coin.radius) / (this.ctx.canvas.width*2.5);
         return distance < combinedRadius;
     }
 

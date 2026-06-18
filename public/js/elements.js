@@ -227,6 +227,7 @@ export class Constellation {
 export class Player {
 
     constructor(position, x_slots, radius) {
+        this.origin_src = new Point(0.5, 0.5);
         this.position = position;
         this.dragging = false;
         this.dragOffsetX = 0;
@@ -235,6 +236,7 @@ export class Player {
         this.x_slots = x_slots // User can drag horizontally the cursor but once he release it, the cursor will snap to the closest slot
         this.radius = radius;
         this.lifetimeSuccessTick = 0; // Counter for the success effect
+        this.max_lifetime_success_ticks = 0;
         this.nb_success = 0; // Counter for the number of successes
     }
 
@@ -313,116 +315,119 @@ export class Player {
     }
 
     setSuccess(lifetimeSuccessTicks) {
+        this.max_lifetime_success_ticks = lifetimeSuccessTicks;
         this.lifetimeSuccessTick = lifetimeSuccessTicks;
         this.nb_success++;
     }
 
     draw(ctx) {
-        ctx.save();
+
+
+       
         const width = ctx.canvas.width;
         const height = ctx.canvas.height;
-
+        ctx.save();
         ctx.font = "bold 18px sans-serif";
-
-        // 2. Aligner le texte (Très important pour placer précisément)
-        // "left" signifie que le X donné sera le bord gauche du texte
         ctx.textAlign = "left";
-        // "top" signifie que le Y donné sera le haut des lettres (évite que le texte dépasse hors de l'écran)
         ctx.textBaseline = "top";
-
-        // 3. Définir la couleur (Blanc)
-        ctx.fillStyle = "white";
-
-        // 4. Facultatif : Ajouter une légère ombre noire pour que le texte 
-        // reste lisible même si le fond devient clair temporairement (ex: étoiles, flashs)
-        ctx.shadowColor = "black";
-        ctx.shadowBlur = 4;
-        ctx.shadowOffsetX = 2;
-        ctx.shadowOffsetY = 2;
-
-        // 5. Dessiner le texte
-        // Le texte sera positionné à 20 pixels du bord gauche (X) et 20 pixels du haut (Y)
-        const score = `${this.nb_success}`;
+        ctx.fillStyle = "white";   
+        let score = `${this.nb_success}`;     
         ctx.fillText(score, 25, 25);
+        ctx.restore();
 
-        let sizeMultiplier = 1.0;
-        let mainColor = "rgba(0, 180, 255, 1)";     // Bleu Néon par défaut
-        let innerColor = "rgba(100, 220, 255, 1)";  // Centre bleu clair
-        let glowIntensity = 0;
 
+       
+        let cursorColor = "rgb(0, 0, 0)";     // Bleu Néon par défaut
+        let innerColor = "rgb(18, 34, 207)";  // Centre bleu clair
+        let shadowColor = "rgba(254, 254, 254, 1)"; // Ombre noire semi-transparente
+        let shadowColorSuccess = "rgb(222, 130, 55)"; // Ombre dorée pour le succès
         let isSuccess = this.lifetimeSuccessTick > 0;
 
-        if (isSuccess) {
-            // 1. Effet de rebond (scale) : gros flash au début qui se stabilise
-            // Utilise une décroissance exponentielle basée sur le temps du success
-            const pulse = Math.exp(-this.lifetimeSuccessTick * 0.1) * 0.4; // Ajoute jusqu'à +40% de taille
-            sizeMultiplier = 1.0 + pulse;
+        let pulse = 1;
+        let boostStretch = 0;
 
-            // 2. Changement de couleur vers le Vert Émeraude / Or
-            mainColor = "rgba(46, 204, 113, 1)";
-            innerColor = "rgba(238, 255, 120, 1)"; // Cœur presque jaune doré
-            
-            // 3. Activation du halo lumineux (Glow)
-            glowIntensity = Math.exp(-this.lifetimeSuccessTick * 0.05); // Le glow s'estompe doucement
+        if (isSuccess) {
+            const targetTick = this.max_lifetime_success_ticks / 2; 
+
+            // 2. On ajuste la largeur de la cloche (spread) par rapport à la durée totale
+            // Diviser par 3 ou 4 permet à la courbe de bien démarrer proche de 0 et de finir proche de 0
+            const spread = this.max_lifetime_success_ticks / 3.5;     
+
+            // 3. Calcul de la distribution normale (Gaussienne)
+            const gauss = Math.exp(-Math.pow((this.lifetimeSuccessTick - targetTick) / spread, 2));
+
+            // 4. Application dynamique sur le pulse et la propulsion
+            pulse = 1 + gauss * 0.35;        // Le vaisseau gonfle au milieu de l'animation
+            boostStretch = gauss * 45;
         }
 
 
         const cx = this.position.x * width;
         const cy = this.position.y * height;
 
-        const currentHeight = this.radius * sizeMultiplier;
+        const ox = this.origin_src.x * width;
+        const oy = this.origin_src.y * height;
+
+        // Math.atan2(y, x) donne l'angle vers la cible. 
+        // On ajoute Math.PI / 2 (90°) car ton triangle dessiné de base pointe vers le HAUT.
+        const targetAngle = Math.atan2(oy - cy, ox - cx) + Math.PI / 2;
+
+        const attenuation = 0.30; // 0.40 = 40% de la rotation max. Ajuste entre 0 et 1 !
+
+        // On s'assure de linéariser l'angle pour éviter les sauts brusques à Math.PI
+        const angle = targetAngle * attenuation;
+        // --- 4. Application de la matrice de Transformation ---
+        // On déplace le repère au centre du vaisseau, puis on tourne
+        
+        ctx.save();
+        ctx.translate(cx, cy);
+        ctx.rotate(angle);
+
+        const currentHeight = this.radius ;
         const distanceToTop = (2 / 3) * currentHeight;
         const distanceToBottom = (1 / 3) * currentHeight;
         const halfBase = currentHeight / Math.sqrt(3); // Écartement horizontal (~0.577 * height)
 
-        // 2. Coordonnées des 3 sommets
-        const ax = cx;
-        const ay = cy - distanceToTop; // Sommet du haut
+            // Les coordonnées deviennent relatives à (0,0) !
+        const ax = 0;
+        const ay = -distanceToTop;
 
-        const bx = cx - halfBase;
-        const by = cy + distanceToBottom; // Sommet bas-gauche
+        const bx = -halfBase;
+        const by = distanceToBottom;
 
-        const cx_point = cx + halfBase;
-        const cy_point = cy + distanceToBottom; // Sommet bas-droit
+        const cx_point = halfBase;
+        const cy_point = distanceToBottom;
 
             // ==========================================
         // RENDER 1 : La Coque Principale (Arrondie)
         // ==========================================
         ctx.lineJoin = "round"; // C'est ICI qu'on arrondit les angles !
         ctx.lineWidth = currentHeight * 0.15; // L'épaisseur de l'arrondi
+        
+        ctx.shadowColor = shadowColor; // Ombre noire semi-transparente
+        ctx.shadowBlur = 6;                    // Un léger flou pour faire réaliste
+        ctx.shadowOffsetX = Math.sin(angle) * 6; 
+        ctx.shadowOffsetY = Math.cos(angle) * 3; // Décalage vertical basé sur la rotation
 
-        if (glowIntensity > 0) {
-            ctx.shadowColor = mainColor;
-            ctx.shadowBlur = currentHeight * 0.5 * glowIntensity;
-        }
 
-        ctx.strokeStyle = mainColor;
-        ctx.fillStyle = "rgba(10, 20, 40, 0.8)";
+        if (isSuccess) {
+            ctx.shadowColor = shadowColorSuccess; // same yellowish as coin
+            ctx.shadowBlur = 6 - boostStretch * 1.2;
+            ctx.shadowOffsetX = 0;
+            ctx.shadowOffsetY = Math.cos(angle) * (6 + boostStretch * 0.1);
+        } 
 
-        // 3. Tracé dans le canvas
+        ctx.strokeStyle = cursorColor;
+        ctx.fillStyle = innerColor;
+
         ctx.beginPath();
         ctx.moveTo(ax, ay);         // On va au sommet du haut
         ctx.lineTo(bx, by);         // Ligne vers le bas-gauche
         ctx.lineTo(cx_point, cy_point); // Ligne vers le bas-droit
         ctx.closePath();            // Ferme le triangle (ligne retour au sommet)
-
-        ctx.fill();
         ctx.stroke();
-
-        ctx.shadowBlur = 0; // On coupe le gros glow externe
-        ctx.lineWidth = currentHeight * 0.05;
-        ctx.strokeStyle = innerColor;
-        ctx.fillStyle = isSuccess ? innerColor : "rgba(255, 255, 255, 0.3)";
-
-        const innerScale = 0.4; // Taille du triangle interne (40% du grand)
-        ctx.beginPath();
-        ctx.moveTo(cx, cy - (distanceToTop * innerScale));
-        ctx.lineTo(cx - (halfBase * innerScale), cy + (distanceToBottom * innerScale));
-        ctx.lineTo(cx + (halfBase * innerScale), cy + (distanceToBottom * innerScale));
-        ctx.closePath();
+        ctx.fill();
         
-        ctx.fill();
-        ctx.stroke();
 
         ctx.restore();
     }
