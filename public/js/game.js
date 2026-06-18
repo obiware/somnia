@@ -182,9 +182,10 @@ export class Game {
                 coins[i].is_captured = true;
                 this.AddRandomStarToConstellation();
                 player.setSuccess(this.config.PLAYER_LIFETIME_SUCCESS_TICKS);
-                let direction = coins[i].current_position.x < 0.5 ? 0 : 1;
+                let x = coins[i].current_position.x;
+                let direction = x < 0.5 ? (x < 0.25 ? 0 : 1) : (x < 0.75 ? 2 : 3);
                 
-                this.soundMachine.ringBell(direction);
+                this.soundMachine.setRainPosition(direction);
             }
         }
     }
@@ -209,22 +210,20 @@ export class SoundMachine {
         this.isEnabled = false;
 
         this.background_sound_file = files.RAIN;
-        this.bell_sound_file = files.BELL;
         
         // Fichiers audio stockés sous forme de AudioBuffers après chargement
         this.buffers = {
-            rain: null,
-            bell: null
+            rain: null
         };
 
         // Références aux sources actives pour pouvoir les manipuler
         this.rainSource = null;
         this.rainCrossfadeGain = null; // Nœud crossfade : géré uniquement par _startRainLoop
         this.rainProgressGain = null;  // Nœud volume : géré uniquement par setProgress
+        this.rainPannerNode = null;    // Nœud panning : géré uniquement par setRainPosition
 
         // Réglages de base
         this.baseVolume = 0.05; // Volume max général (divisé par 3 pour ne pas saturer)
-        this.bellMaxVolume = 0.05; // Volume max pour la cloche tibétaine
         this.currentProgress = 0;
     }
 
@@ -233,11 +232,7 @@ export class SoundMachine {
         // Le contexte audio ne peut être créé qu'après un clic utilisateur (sécurité navigateur)
         this.ctx = new (window.AudioContext || window.webkitAudioContext)();
         
-        // Chargement en parallèle des deux fichiers
-        await Promise.all([
-            this._loadSound('rain', this.background_sound_file),
-            this._loadSound('bell', this.bell_sound_file)
-        ]);
+        await this._loadSound('rain', this.background_sound_file);
 
         // iOS suspend l'AudioContext agressivement (verrouillage écran, Low Power Mode)
         // Ce listener le reprend automatiquement quand l'app revient au premier plan
@@ -270,10 +265,23 @@ export class SoundMachine {
         }
 
         if (this.isEnabled) {
-            // Créer le nœud de volume global (progress) une seule fois, il persiste
+            // Créer les nœuds persistants une seule fois
             if (!this.rainProgressGain) {
                 this.rainProgressGain = this.ctx.createGain();
-                this.rainProgressGain.connect(this.ctx.destination);
+
+                // Panner : iOS < 14.1 ne supporte pas StereoPannerNode → fallback PannerNode 3D
+                if (this.ctx.createStereoPanner) {
+                    this.rainPannerNode = this.ctx.createStereoPanner();
+                    this.rainPannerNode.pan.setValueAtTime(0, this.ctx.currentTime);
+                } else {
+                    this.rainPannerNode = this.ctx.createPanner();
+                    this.rainPannerNode.panningModel = 'equalpower';
+                    this.rainPannerNode.setPosition(0, 0, 1);
+                }
+
+                // Chaîne persistante : ... → rainProgressGain → rainPannerNode → destination
+                this.rainProgressGain.connect(this.rainPannerNode);
+                this.rainPannerNode.connect(this.ctx.destination);
             }
             // Fade-in à l'activation : part de 0 et monte sur 1.5 secondes
             const targetVolume = this._calculateVolume() * this.baseVolume;
@@ -347,48 +355,35 @@ export class SoundMachine {
         }
     }
 
-    // 4. Déclenchement de la cloche tibétaine spatialisée
-    ringBell(direction) {
-        if (!this.isEnabled || !this.buffers.bell) return;
+    // 4. Déplace la position stéréo de la pluie (0→gauche, 3→droite)
+    setRainPosition(pos) {
+        if (!this.rainPannerNode) return;
 
-        const p = this.currentProgress; // [0, 1]
+        const panValues = [-1, -0.75, 0.75, 1];
+        const panValue = panValues[pos] ?? 0;
+        const fadeDuration = 1; // secondes pour glisser d'une position à l'autre
 
-        const source = this.ctx.createBufferSource();
-        const gainNode = this.ctx.createGain();
-        const lowPassFilter = this.ctx.createBiquadFilter();
-
-        source.buffer = this.buffers.bell;
-
-        // Volume : baisse de 100% à 30% avec le progress (via _calculateVolume)
-        const bellVolume = this._calculateVolume() * this.bellMaxVolume;
-        gainNode.gain.setValueAtTime(bellVolume, this.ctx.currentTime);
-
-        // Pitch : de 1.0 (progress=0) à 0.72 (progress=1) — effet "plus grave"
-        source.playbackRate.value = 1.0 - (p * 0.28);
-
-        // Filtre passe-bas : fréquence de coupure de 8000Hz à 1200Hz — effet "étouffé / éloigné"
-        lowPassFilter.type = 'lowpass';
-        lowPassFilter.frequency.value = 8000 - (p * 6800);
-
-        // Panning : StereoPannerNode non supporté sur iOS < 14.1 → fallback PannerNode 3D
-        const panValue = direction === 0 ? -1 : 1;
-        let pannerNode;
-        if (this.ctx.createStereoPanner) {
-            pannerNode = this.ctx.createStereoPanner();
-            pannerNode.pan.setValueAtTime(panValue, this.ctx.currentTime);
+        if (this.rainPannerNode.pan) {
+            // StereoPannerNode : transition douce via linearRampToValueAtTime
+            const pan = this.rainPannerNode.pan;
+            const now = this.ctx.currentTime;
+            pan.setValueAtTime(pan.value, now);
+            pan.linearRampToValueAtTime(panValue, now + fadeDuration);
         } else {
-            pannerNode = this.ctx.createPanner();
-            pannerNode.panningModel = 'equalpower';
-            pannerNode.setPosition(panValue, 0, 1 - Math.abs(panValue));
+            // Fallback PannerNode 3D (iOS < 14.1) — pas d'automation native,
+            // on simule la transition avec de petits pas sur un intervalle
+            const steps = 30;
+            const stepDuration = fadeDuration / steps;
+            const startPan = this._lastPanValue ?? 0;
+            for (let i = 1; i <= steps; i++) {
+                const t = i / steps;
+                const interpolated = startPan + (panValue - startPan) * t;
+                setTimeout(() => {
+                    this.rainPannerNode.setPosition(interpolated, 0, 1 - Math.abs(interpolated));
+                }, i * stepDuration * 1000);
+            }
         }
-
-        // Chaîne : source → panner → lowpass → gain → destination
-        source.connect(pannerNode);
-        pannerNode.connect(lowPassFilter);
-        lowPassFilter.connect(gainNode);
-        gainNode.connect(this.ctx.destination);
-
-        source.start(0);
+        this._lastPanValue = panValue;
     }
 
     // 5. Gestion dynamique de l'éloignement (Progress)
