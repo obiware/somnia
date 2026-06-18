@@ -112,7 +112,7 @@
   'use strict';
   import { Game } from './public/js/game.js';
   
-  const TOTAL_GAME_TRANSITION_DURATION_SECONDS = 20*60; // 20 minutes
+  const TOTAL_GAME_TRANSITION_DURATION_SECONDS = 15*60; // 20 minutes
   const TICKS_PER_SECOND = 60;
   
   const INTERVAL_TICK_MS = 1000 / TICKS_PER_SECOND; // 60 FPS
@@ -128,7 +128,7 @@
       STARS_Y_MAX_SPACE : 0.60, // 33% of the screen height from the top is used to drawing constellation 
       STARS_X_MAX_SPACE : 1, // 33% of the screen width from the left is used to drawing constellation
       
-      NB_STARS : 66,
+      NB_STARS : 75,
 
       CONSTELLATION_MAX_LIFETIME_TICKS : 48 * TICKS_PER_SECOND, // 48 seconds 
       CONSTELLATION_PATH_DURATION_TICKS : TICKS_PER_SECOND * 3, // speed of the constellation movement (in percentage of the screen width per tick)
@@ -139,8 +139,8 @@
       PLAYER_LIFETIME_SUCCESS_TICKS : 2.5 * TICKS_PER_SECOND, // 2 seconds
 
       COIN_RADIUS : 24,
-      COIN_SPEED : 0.0025, // percent by tick , 0.04 means 4% of the screen height per tick
-      COIN_INTERVAL_TICKS : 5 * TICKS_PER_SECOND, // ticks between each coin spawn
+      COIN_SPEED : 0.0050, // percent by tick , 0.04 means 4% of the screen height per tick
+      COIN_INTERVAL_TICKS : 3 * TICKS_PER_SECOND, // ticks between each coin spawn
       COIN_SLOTS : [0.125, 0.375, 0.625, 0.875], // 4 slots for the coins to spawn horizontally
     
       FINAL_COIN_SPEED : 0.00125,

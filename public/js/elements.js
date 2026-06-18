@@ -108,7 +108,7 @@ export class StarCollection {
 
             if (this.perspectiveEngine.isOnTheWay(x,y)){continue;}
 
-            const size = Math.random() * 2.5 + 1;
+            const size = Math.random() * 1.5 + 1;
             const intensity = Math.random() * 0.5 + 0.5;
             const scale = Math.random() * 0.5 + 0.5;
             this.stars.push(new Star(new Point(x, y), size, intensity, scale));
@@ -441,7 +441,7 @@ export class Coin {
         this.radius = radius;
         this.max_speed = max_speed;
         this.current_speed = new Point(0, 0);
-        this.acceleration = new Point(0.000005, 0.000005); // pixels per tick
+        this.acceleration = new Point(0.000010, 0.000010); // pixels per tick
         this.current_position = new Point(origin.x, origin.y);
        
         this.direction = getVector(origin, target);
@@ -468,9 +468,27 @@ export class Coin {
         const y = this.current_position.y * height;
 
         let rad = this.getCurrentRadius();
+
+
         ctx.save();
+
+        ctx.shadowColor = "rgba(255, 140, 0, 0.6)"; // Halo orange chaud
+        ctx.shadowBlur = rad * 1.5;                 // Plus elle est proche, plus ça irradie
+        ctx.shadowOffsetX = 0;
+        ctx.shadowOffsetY = 0;
+
+        let gradient = ctx.createRadialGradient(x, y, 0, x, y, rad);
+    
+        // Le cœur de l'étoile est blanc incandescent
+        gradient.addColorStop(0, "rgba(255, 255, 255, 1)"); 
+        // Transition vers un jaune/or vif à 40% du rayon
+        gradient.addColorStop(0.4, "rgba(255, 215, 0, 1)"); 
+        // Transition vers un orange/rouge qui s'estompe sur les bords (rend l'objet moins net)
+        gradient.addColorStop(0.8, "rgba(255, 69, 0, 0.8)");
+        // Bordure complètement invisible pour éviter l'effet "coupé au couteau"
+        gradient.addColorStop(1, "rgba(255, 69, 0, 0)");
         // Draw the coin as a simple yellow circle for now
-        ctx.fillStyle = "rgba(255, 215, 0, 1)";     
+        ctx.fillStyle = gradient;     
         ctx.beginPath();
         ctx.arc(x, y, rad, 0, 2 * Math.PI);
         ctx.fill();
