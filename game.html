@@ -110,9 +110,9 @@
 
 
   'use strict';
-  import { Game } from './public/js/game.js';
+  import { Game, SoundMachine } from './public/js/game.js';
   
-  const TOTAL_GAME_TRANSITION_DURATION_SECONDS = 15*60; // 20 minutes
+  const TOTAL_GAME_TRANSITION_DURATION_SECONDS = 15*60; // 1 minute
   const TICKS_PER_SECOND = 60;
   
   const INTERVAL_TICK_MS = 1000 / TICKS_PER_SECOND; // 60 FPS
@@ -145,6 +145,12 @@
     
       FINAL_COIN_SPEED : 0.00125,
       FINAL_COIN_INTERVAL_TICKS : 10 * TICKS_PER_SECOND, // ticks between each target coin spawn
+
+      AUDIO_FILES: {
+        RAIN: 'public/audio/rain_loop.mp3',
+        BELL: 'public/audio/tibetan_bell.mp3',
+      }
+    
     }  
 
   
@@ -155,7 +161,13 @@
   const canvas = document.getElementById('c');
   const ctx    = canvas.getContext('2d');
 
-  const game = new Game(CONFIG, ctx, canvas.width, canvas.height);
+  const audio = new SoundMachine(CONFIG.AUDIO_FILES);
+  
+    window.addEventListener('click', () => {
+     audio.init();
+    }, { once: true });
+
+  const game = new Game(CONFIG, ctx, audio);
 
   function resizeCanvas() {
     canvas.width  = window.innerWidth;
@@ -164,6 +176,7 @@
   window.addEventListener('resize', resizeCanvas);
 
 
+  var soundEnabled = false;
 
   // Sound toggle
   document.getElementById('soundBtn').addEventListener('click', e => {
@@ -181,7 +194,12 @@
       }
     }, INTERVAL_TICK_MS);
   }
-
+  function setSoundEnabled(enabled) {
+    soundEnabled = enabled;
+    document.getElementById('soundBtn').textContent = enabled ? '🔊' : '🔇';
+    audio.setEnableSound(enabled);
+    
+  }
   // ================================================================
   //  Start overlay
   // ================================================================
