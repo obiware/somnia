@@ -40,6 +40,12 @@ export class PerspectiveEngine {
         //this.lines.push(new Line(originPoint, topLeftPoint));
         //this.lines.push(new Line(originPoint, topRightPoint));
         this.lines.push(new Line(originPoint, bottomLeftPoint));
+        let projection1 = this.projectLineOfSight(originPoint, new Point(0.25, bottomLeftPoint.y), 1);
+        this.lines.push(new Line(originPoint, projection1));
+        let projection2 = this.projectLineOfSight(originPoint, new Point(0.5, bottomLeftPoint.y), 1);
+        this.lines.push(new Line(originPoint, projection2));
+        let projection3 = this.projectLineOfSight(originPoint, new Point(0.75, bottomLeftPoint.y), 1);
+        this.lines.push(new Line(originPoint, projection3));
         this.lines.push(new Line(originPoint, bottomRightPoint));
         
 
@@ -76,8 +82,11 @@ export class PerspectiveEngine {
          let width = ctx.canvas.width;
          let height = ctx.canvas.height;
 
-        this.drawArrivedLines(ctx);
+        //this.drawArrivedLines(ctx);
         
+        ctx.setLineDash([20, 10]);
+        ctx.strokeStyle = "white";
+        ctx.lineWidth = 2;
         
         for (let line of this.lines) {
             let gradient = ctx.createLinearGradient(

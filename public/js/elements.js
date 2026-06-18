@@ -372,7 +372,7 @@ export class Player {
         // On ajoute Math.PI / 2 (90°) car ton triangle dessiné de base pointe vers le HAUT.
         const targetAngle = Math.atan2(oy - cy, ox - cx) + Math.PI / 2;
 
-        const attenuation = 0.30; // 0.40 = 40% de la rotation max. Ajuste entre 0 et 1 !
+        const attenuation = 0.6; // 0.40 = 40% de la rotation max. Ajuste entre 0 et 1 !
 
         // On s'assure de linéariser l'angle pour éviter les sauts brusques à Math.PI
         const angle = targetAngle * attenuation;

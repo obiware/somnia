@@ -183,9 +183,9 @@ export class Game {
                 this.AddRandomStarToConstellation();
                 player.setSuccess(this.config.PLAYER_LIFETIME_SUCCESS_TICKS);
                 let x = coins[i].current_position.x;
-                let direction = x < 0.5 ? (x < 0.25 ? 0 : 1) : (x < 0.75 ? 2 : 3);
+                let slot = x < 0.5 ? (x < 0.25 ? 0 : 1) : (x < 0.75 ? 2 : 3);
                 
-                this.soundMachine.setRainPosition(direction);
+                this.soundMachine.setRainPosition(slot);
             }
         }
     }
