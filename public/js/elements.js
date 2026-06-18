@@ -108,7 +108,7 @@ export class StarCollection {
 
             if (this.perspectiveEngine.isOnTheWay(x,y)){continue;}
 
-            const size = Math.random() * 1.5 + 1;
+            const size = Math.random() * 3.5 + 3;
             const intensity = Math.random() * 0.5 + 0.5;
             const scale = Math.random() * 0.5 + 0.5;
             this.stars.push(new Star(new Point(x, y), size, intensity, scale));
