@@ -339,12 +339,12 @@ export class Player {
         const width = ctx.canvas.width;
         const height = ctx.canvas.height;
         ctx.save();
-        ctx.font = "bold 18px sans-serif";
+        ctx.font = "bold 56px sans-serif";
         ctx.textAlign = "left";
         ctx.textBaseline = "top";
         ctx.fillStyle = "white";   
         let score = `${this.nb_success}`;     
-        ctx.fillText(score, 25, 25);
+        ctx.fillText(score, 75, 75);
         ctx.restore();
 
 
