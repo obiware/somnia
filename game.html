@@ -16,6 +16,7 @@
       top: 0; left: 0;
       width: 100%; height: 100%;
       display: block;
+     
     }
 
     /* ── HUD ── */
@@ -173,8 +174,25 @@
   const game = new Game(CONFIG, ctx, audio);
 
   function resizeCanvas() {
-    canvas.width  = window.innerWidth;
-    canvas.height = window.innerHeight;
+    const displayWidth = window.innerWidth;
+    const displayHeight = window.innerHeight;
+
+    // 2. On récupère la densité de pixels (souvent 2 ou 3 sur iPhone, 1 sur PC)
+    // On peut multiplier par 0.9 ici si tu veux garder exactement ton feeling à 90%
+    const dpr = (window.devicePixelRatio || 1) * 0.9; 
+
+    // 3. On donne au Canvas une résolution interne beaucoup plus grande (ultra-net)
+    canvas.width = displayWidth * dpr;
+    canvas.height = displayHeight * dpr;
+
+    // 4. On force le Canvas à garder sa taille visuelle d'origine en CSS
+    canvas.style.width = displayWidth + 'px';
+    canvas.style.height = displayHeight + 'px';
+    
+    // 5. TRÈS IMPORTANT : Si tu utilises cette méthode, tu dois dire au Context 
+    // de s'adapter à ce changement d'échelle pour que tes dessins ne soient pas minuscules :
+    const ctx = canvas.getContext('2d');
+    ctx.scale(dpr, dpr);
   }
   window.addEventListener('resize', resizeCanvas);
 
