@@ -401,8 +401,8 @@ export class Player {
             // ==========================================
         // RENDER 1 : La Coque Principale (Arrondie)
         // ==========================================
-        ctx.lineJoin = "round"; // C'est ICI qu'on arrondit les angles !
-        ctx.lineWidth = currentHeight * 0.15; // L'épaisseur de l'arrondi
+        ctx.lineJoin = "round"; 
+        ctx.lineWidth = currentHeight * 0.10; 
         
         ctx.shadowColor = shadowColor; // Ombre noire semi-transparente
         ctx.shadowBlur = 4;                    // Un léger flou pour faire réaliste
@@ -435,11 +435,13 @@ export class Player {
 }
 
 export class Coin {
-    constructor(origin, target, radius, speed) {
+    constructor(origin, target, radius, max_speed) {
         this.origin = origin;
         this.target = target;
         this.radius = radius;
-        this.speed = speed; // pixels per tick
+        this.max_speed = max_speed;
+        this.current_speed = new Point(0, 0);
+        this.acceleration = new Point(0.000005, 0.000005); // pixels per tick
         this.current_position = new Point(origin.x, origin.y);
        
         this.direction = getVector(origin, target);
@@ -448,9 +450,13 @@ export class Coin {
     }
 
     run() {
-       
-        this.current_position.x += this.direction.x * this.speed;
-        this.current_position.y += this.direction.y * this.speed;
+        
+        // Update current speed based on acceleration
+        this.current_speed.x = Math.min(this.current_speed.x + this.acceleration.x, this.max_speed);
+        this.current_speed.y = Math.min(this.current_speed.y + this.acceleration.y, this.max_speed);
+
+        this.current_position.x += this.direction.x * this.current_speed.x;
+        this.current_position.y += this.direction.y * this.current_speed.y;
         
     }
 
