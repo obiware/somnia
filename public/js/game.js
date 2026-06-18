@@ -238,7 +238,14 @@ export class SoundMachine {
             this._loadSound('rain', this.background_sound_file),
             this._loadSound('bell', this.bell_sound_file)
         ]);
-        
+
+        // iOS suspend l'AudioContext agressivement (verrouillage écran, Low Power Mode)
+        // Ce listener le reprend automatiquement quand l'app revient au premier plan
+        document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'visible' && this.isEnabled && this.ctx && this.ctx.state === 'suspended') {
+                this.ctx.resume();
+            }
+        });
     }
 
     async _loadSound(key, url) {
@@ -252,13 +259,14 @@ export class SoundMachine {
     }
 
     // 2. Activer / Désactiver le son via l'interface
-    setEnableSound(enabled) {
+    async setEnableSound(enabled) {
         this.isEnabled = enabled;
 
         // Sécurité au cas où init() n'a pas été appelé ou si le contexte est suspendu
         if (!this.ctx) return;
+        // Sur iOS, resume() est asynchrone — il faut l'attendre avant de jouer du son
         if (this.ctx.state === 'suspended') {
-            this.ctx.resume();
+            await this.ctx.resume();
         }
 
         if (this.isEnabled) {
@@ -347,7 +355,6 @@ export class SoundMachine {
 
         const source = this.ctx.createBufferSource();
         const gainNode = this.ctx.createGain();
-        const pannerNode = this.ctx.createStereoPanner();
         const lowPassFilter = this.ctx.createBiquadFilter();
 
         source.buffer = this.buffers.bell;
@@ -363,8 +370,17 @@ export class SoundMachine {
         lowPassFilter.type = 'lowpass';
         lowPassFilter.frequency.value = 8000 - (p * 6800);
 
+        // Panning : StereoPannerNode non supporté sur iOS < 14.1 → fallback PannerNode 3D
         const panValue = direction === 0 ? -1 : 1;
-        pannerNode.pan.setValueAtTime(panValue, this.ctx.currentTime);
+        let pannerNode;
+        if (this.ctx.createStereoPanner) {
+            pannerNode = this.ctx.createStereoPanner();
+            pannerNode.pan.setValueAtTime(panValue, this.ctx.currentTime);
+        } else {
+            pannerNode = this.ctx.createPanner();
+            pannerNode.panningModel = 'equalpower';
+            pannerNode.setPosition(panValue, 0, 1 - Math.abs(panValue));
+        }
 
         // Chaîne : source → panner → lowpass → gain → destination
         source.connect(pannerNode);
@@ -382,10 +398,17 @@ export class SoundMachine {
         // On adapte uniquement le nœud de volume global, sans toucher au crossfade
         if (this.isEnabled && this.rainProgressGain) {
             const newVolume = this._calculateVolume() * this.baseVolume;
-            // cancelAndHoldAtTime évite l'accumulation de ramps dans la file d'automation
-            // (setProgress est appelé ~50x/s, sans cancel la queue grossit indéfiniment)
-            this.rainProgressGain.gain.cancelAndHoldAtTime(this.ctx.currentTime);
-            this.rainProgressGain.gain.linearRampToValueAtTime(newVolume, this.ctx.currentTime + 0.2);
+            const gain = this.rainProgressGain.gain;
+            const now = this.ctx.currentTime;
+            // cancelAndHoldAtTime non supporté sur iOS < 14.5 — fallback manuel
+            if (gain.cancelAndHoldAtTime) {
+                gain.cancelAndHoldAtTime(now);
+            } else {
+                const currentValue = gain.value;
+                gain.cancelScheduledValues(now);
+                gain.setValueAtTime(currentValue, now);
+            }
+            gain.linearRampToValueAtTime(newVolume, now + 0.2);
         }
     }
 
