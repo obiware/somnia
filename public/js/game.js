@@ -65,7 +65,7 @@ export class Game {
         this.state.constellation = new Constellation(this.config.CONSTELLATION_MAX_LIFETIME_TICKS, this.config.CONSTELLATION_PATH_DURATION_TICKS);
         
         const positionPlayer = new Point(this.config.PLAYER_X_SLOTS[1], this.config.PLAYER_Y_POSITION);
-        this.state.player = new Player(positionPlayer, this.config.PLAYER_X_SLOTS, this.config.PLAYER_RADIUS);
+        this.state.player = new Player(positionPlayer, this.config.PLAYER_X_SLOTS, this.config.PLAYER_RADIUS, this.config.PLAYER_BOOST_X_MOVE);
         this.state.player.setListeners(this.ctx.canvas);
         
         //Generate four Point from the four COIN_SLOTS using PLAYER_Y_POSITION as y coordinate
@@ -186,6 +186,7 @@ export class Game {
                 let slot = x < 0.5 ? (x < 0.25 ? 0 : 1) : (x < 0.75 ? 2 : 3);
                 
                 this.soundMachine.setRainPosition(slot);
+                this.perspectiveEngine.setSuccessSlot(slot, this.config.LINE_LIFETIME_SUCCESS_TICKS);
             }
         }
     }
@@ -357,10 +358,12 @@ export class SoundMachine {
 
     // 4. Déplace la position stéréo de la pluie (0→gauche, 3→droite)
     setRainPosition(pos) {
+        
         if (!this.rainPannerNode) return;
 
         const panValues = [-1, -0.75, 0.75, 1];
         const panValue = panValues[pos] ?? 0;
+        
         const fadeDuration = 1; // secondes pour glisser d'une position à l'autre
 
         if (this.rainPannerNode.pan) {

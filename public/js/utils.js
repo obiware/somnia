@@ -9,7 +9,40 @@ export class Line {
     constructor(startPoint, endPoint) {
         this.startPoint = startPoint;
         this.endPoint = endPoint;
+        this.nb_tick_success = 0;
+        this.is_shiny = false;
     }   
+
+    isSuccess() {
+        if (this.nb_tick_success > 0) {
+            this.nb_tick_success--;
+        }
+        return this.nb_tick_success > 0;
+    }
+
+
+    // if line is success, you have 10% chance that shiny status changes to inverse. To make a scintillement,
+    // if line is not succes, return false;
+    isShiny() {
+        // if (this.isSuccess()) {
+        //     if (Math.random() < 0.1) {
+        //         this.is_shiny = !this.is_shiny;
+        //     }
+            
+        // } else {
+        //     this.is_shiny = false;
+        // }
+
+        //return this.is_shiny;
+        return this.isSuccess();
+    }
+
+
+    setSuccess(nb_tick_success) {
+        this.nb_tick_success = nb_tick_success;
+    }
+
+
 }
 
 export function calcProgress(current_t, max_t) {
@@ -77,25 +110,49 @@ export class PerspectiveEngine {
 
     }
 
+    setSuccessSlot(slot, nb_tick_success) {
+        
+        if (slot == 0) {
+            this.lines[0].setSuccess(nb_tick_success);
+            this.lines[1].setSuccess(nb_tick_success);
+        }
+        if (slot == 1) {
+            this.lines[1].setSuccess(nb_tick_success);
+            this.lines[2].setSuccess(nb_tick_success);
+        }
+        if (slot == 2) {
+            this.lines[2].setSuccess(nb_tick_success);
+            this.lines[3].setSuccess(nb_tick_success);
+        }
+        if (slot == 3) {
+            this.lines[3].setSuccess(nb_tick_success);
+            this.lines[4].setSuccess(nb_tick_success);
+        }
+
+    }
+
     drawPerspectives(ctx) {
         ctx.save();
          let width = ctx.canvas.width;
          let height = ctx.canvas.height;
-
-        //this.drawArrivedLines(ctx);
         
         ctx.setLineDash([20, 10]);
         ctx.strokeStyle = "white";
         ctx.lineWidth = 2;
         
         for (let line of this.lines) {
+            let is_shiny = line.isShiny();
+            const background_color_start = is_shiny ? 'rgba(255, 255, 0, 0.1)' : 'rgba(255, 255, 255, 0)';
+            // if shiny, gradient end with yellow bright else normal gradient to white
+            const background_color_end = is_shiny ? 'rgba(255, 255, 0, 1)' : 'rgba(255, 255, 255, 1)';
+
             let gradient = ctx.createLinearGradient(
                 line.startPoint.x * width, 
                 line.startPoint.y * height, 
                 line.endPoint.x * width, 
                 line.endPoint.y * height);
-            gradient.addColorStop(0, 'rgba(255, 255, 255, 0)');
-            gradient.addColorStop(1, 'rgba(255, 255, 255, 1)');
+            gradient.addColorStop(0, background_color_start);
+            gradient.addColorStop(1, background_color_end);
             
             ctx.strokeStyle = gradient;
             ctx.lineWidth = 3; // L'épaisseur générale de tes lignes
@@ -114,51 +171,6 @@ export class PerspectiveEngine {
     }
 
 
-    drawArrivedLines(ctx) {
-        
-        const width = ctx.canvas.width;
-        const height = ctx.canvas.height;
-        
-        ctx.setLineDash([20, 10]);
-
-        // 2. Paramétrer le style de la ligne comme d'habitude
-        ctx.strokeStyle = "white";
-        ctx.lineWidth = 2;
-
-        // 3. Dessiner la ligne horizontale d'arrivée
-        ctx.beginPath();
-        ctx.moveTo(this.bottomLeftPoint.x * width + 0.05*width, this.bottomLeftPoint.y * height *0.95);
-        ctx.lineTo(this.bottomRightPoint.x * width - 0.05*width, this.bottomRightPoint.y * height*0.95);
-        ctx.stroke();
-
-
-        // Dessiner les 4 couloirs qui partent de l'origine.
-        
-
-
-        const couloirs = [new Point(0.20*width, this.bottomLeftPoint.y * height), new Point(0.5*width, this.bottomLeftPoint.y * height), new Point(0.80*width, this.bottomLeftPoint.y * height)];
-
-        for (let couloir of couloirs) {
-            
-            const projection = this.projectLineOfSight(this.origin, couloir, this.bottomLeftPoint.y * height);
-            
-            let gradient = ctx.createLinearGradient(
-                this.origin.x * width, 
-                this.origin.y * height, 
-                projection.x, 
-                height);
-            gradient.addColorStop(0, 'rgba(255, 255, 255, 0)');
-            gradient.addColorStop(1, 'rgba(255, 255, 255, 1)');
-            
-        
-            ctx.strokeStyle = gradient;
-            ctx.lineWidth = 2;
-            ctx.beginPath();
-            ctx.moveTo(this.origin.x*width, this.origin.y * height);
-            ctx.lineTo(projection.x,  height);
-            ctx.stroke();
-        }
-    }
 
     projectLineOfSight(A, B, targetY) {
     // Sécurité : éviter la division par zéro si A et B ont le même Y

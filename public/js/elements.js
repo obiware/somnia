@@ -226,7 +226,7 @@ export class Constellation {
 
 export class Player {
 
-    constructor(position, x_slots, radius) {
+    constructor(position, x_slots, radius, boost_x_move) {
         this.origin_src = new Point(0.5, 0.5);
         this.position = position;
         this.dragging = false;
@@ -238,6 +238,8 @@ export class Player {
         this.lifetimeSuccessTick = 0; // Counter for the success effect
         this.max_lifetime_success_ticks = 0;
         this.nb_success = 0; // Counter for the number of successes
+        this.boost_x_move = boost_x_move;
+    
     }
 
     setListeners (canvas) {
@@ -280,7 +282,7 @@ export class Player {
             e.preventDefault();
             for (const t of e.changedTouches) {
             if (t.identifier !== this.touchId) continue;
-            this.position.x = (t.clientX - this.dragOffsetX) / canvas.width;
+            this.position.x = (t.clientX - (this.dragOffsetX * this.boost_x_move)) / canvas.width;
             this.position.x = Math.max(0, Math.min(1, this.position.x)); // Clamp between 0 and 1
             }
         }, { passive: false });
@@ -340,7 +342,7 @@ export class Player {
         let cursorColor = "rgb(0, 0, 0)";     // Bleu Néon par défaut
         let innerColor = "rgb(18, 34, 207)";  // Centre bleu clair
         let shadowColor = "rgba(254, 254, 254, 0.8)"; // Ombre noire semi-transparente
-        let shadowColorSuccess = "rgba(254, 254, 254, 0.6 )"; // Ombre dorée pour le succès
+        let shadowColorSuccess = "rgba(254, 190, 0, 0.84)"; // Ombre dorée pour le succès
         let isSuccess = this.lifetimeSuccessTick > 0;
 
         let pulse = 1;
