@@ -47,8 +47,8 @@ export class Game {
         this.displayConstellation();
 
         this.perspectiveEngine.drawPerspectives(this.ctx);
-        this.displayPlayer();
         this.displayCoins();
+        this.displayPlayer();
     }
 
     initState() {

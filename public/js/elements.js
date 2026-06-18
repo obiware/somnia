@@ -225,7 +225,7 @@ export class Player {
         this.x_slots = x_slots // User can drag horizontally the cursor but once he release it, the cursor will snap to the closest slot
         this.radius = radius;
         this.lifetimeSuccessTick = 0; // Counter for the success effect
-
+        this.nb_success = 0; // Counter for the number of successes
     }
 
     setListeners (canvas) {
@@ -304,12 +304,36 @@ export class Player {
 
     setSuccess(lifetimeSuccessTicks) {
         this.lifetimeSuccessTick = lifetimeSuccessTicks;
+        this.nb_success++;
     }
 
     draw(ctx) {
         ctx.save();
         const width = ctx.canvas.width;
         const height = ctx.canvas.height;
+
+        ctx.font = "bold 18px sans-serif";
+
+        // 2. Aligner le texte (Très important pour placer précisément)
+        // "left" signifie que le X donné sera le bord gauche du texte
+        ctx.textAlign = "left";
+        // "top" signifie que le Y donné sera le haut des lettres (évite que le texte dépasse hors de l'écran)
+        ctx.textBaseline = "top";
+
+        // 3. Définir la couleur (Blanc)
+        ctx.fillStyle = "white";
+
+        // 4. Facultatif : Ajouter une légère ombre noire pour que le texte 
+        // reste lisible même si le fond devient clair temporairement (ex: étoiles, flashs)
+        ctx.shadowColor = "black";
+        ctx.shadowBlur = 4;
+        ctx.shadowOffsetX = 2;
+        ctx.shadowOffsetY = 2;
+
+        // 5. Dessiner le texte
+        // Le texte sera positionné à 20 pixels du bord gauche (X) et 20 pixels du haut (Y)
+        const score = `${this.nb_success}`;
+        ctx.fillText(score, 25, 25);
 
         let sizeMultiplier = 1.0;
         let mainColor = "rgba(0, 180, 255, 1)";     // Bleu Néon par défaut
