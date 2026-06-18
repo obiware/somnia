@@ -394,3 +394,112 @@ export class Player {
     }
     
 }
+
+export class Coin {
+    constructor(origin, target, radius, speed) {
+        this.origin = origin;
+        this.target = target;
+        this.radius = radius;
+        this.speed = speed; // pixels per tick
+        this.current_position = new Point(origin.x, origin.y);
+       
+        this.direction = getVector(origin, target);
+        
+        this.is_captured = false;
+    }
+
+    run() {
+       
+        this.current_position.x += this.direction.x * this.speed;
+        this.current_position.y += this.direction.y * this.speed;
+        
+    }
+
+    draw(ctx) {
+        const width = ctx.canvas.width;
+        const height = ctx.canvas.height;
+        
+        const x = this.current_position.x * width;
+        const y = this.current_position.y * height;
+
+        let rad = this.getCurrentRadius();
+        ctx.save();
+        // Draw the coin as a simple yellow circle for now
+        ctx.fillStyle = "rgba(255, 215, 0, 1)";     
+        ctx.beginPath();
+        ctx.arc(x, y, rad, 0, 2 * Math.PI);
+        ctx.fill();
+        ctx.restore();
+    }
+
+    //calculate current radius based on distance to target starting to 0
+    getCurrentRadius() {
+        const totalDistance = Math.sqrt(Math.pow(this.target.x - this.origin.x, 2) + Math.pow(this.target.y - this.origin.y, 2));
+        const currentDistance = Math.sqrt(Math.pow(this.target.x - this.current_position.x, 2) + Math.pow(this.target.y - this.current_position.y, 2));
+        const progress = 1 - (currentDistance / totalDistance);
+        return this.radius * progress;
+    }
+}
+
+export class CoinGenerator {
+    constructor(origin, targets, radius, speed) {
+        this.origin = origin; // Point(x,y);
+        this.targets = targets; // Array of Point(x,y);
+        this.radius = radius;
+        this.speed = speed;
+        this.current_side = 0; // if 0, has to chose between 0 and 1 slot, if 1, has to chose between 2 and 3
+
+    }
+
+    // Just return a new coin
+    generateCoin() {
+        
+        let targetIndex;
+        if (this.current_side === 0) {
+            targetIndex = Math.floor(Math.random() * 2); // 0 or 1
+        } else {
+            targetIndex = Math.floor(Math.random() * 2) + 2; // 2 or 3
+        }
+
+        const target = this.targets[targetIndex];
+        const coin = new Coin(this.origin, target, this.radius, this.speed);
+        this.current_side = 1 - this.current_side; // Toggle side for next coin
+        
+        return coin;
+    }
+
+}
+
+export class CoinCollection {
+    constructor(coinGenerator, coin_interval_ticks) {
+        this.coinGenerator = coinGenerator;
+        this.coin_interval_ticks = coin_interval_ticks;
+        this.ticks_since_last_coin = 0;
+        this.coins = [];
+    }
+
+    run() {
+        
+        this.ticks_since_last_coin++;
+        if (this.ticks_since_last_coin >= this.coin_interval_ticks) {
+            this.ticks_since_last_coin = 0;
+            const coin = this.coinGenerator.generateCoin();
+            this.coins.push(coin);
+        }
+
+        this.coins.forEach(coin => coin.run());
+
+        
+        // remove coins that have reached their target by checking if the y is above 1 (out of the screen)
+        this.coins = this.coins.filter(coin => {
+            if (coin.current_position.y > 1) {
+                return false;
+            }
+            return true;
+        });
+    }
+
+    draw(ctx) {
+        this.coins.forEach(coin => coin.draw(ctx));
+    }
+}

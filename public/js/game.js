@@ -1,11 +1,12 @@
 import {calcProgress, lerp, PerspectiveEngine, Point} from './utils.js';
-import {Lane, Star, StarCollection, Constellation, Player} from './elements.js';
+import {Lane, Star, StarCollection, Constellation, Player, Coin, CoinGenerator, CoinCollection} from './elements.js';
 
  var GameState = {
     background_color: [0, 0, 0],
     star_collection: null,
     constellation: null,
     player: null,
+    coin_collection: null,
 }
 
 
@@ -31,9 +32,11 @@ export class Game {
 
     runState(tick) {
         this.runProgressBackground(tick);
-        this.tempAddRandomStarToConstellation(tick);
+        //this.tempAddRandomStarToConstellation(tick);
         this.runConstellation(tick);
         this.runPlayer(tick);
+        this.runCoins(tick);
+        this.checkCollisions();
     }
 
     displayState(){
@@ -45,7 +48,7 @@ export class Game {
 
         this.perspectiveEngine.drawPerspectives(this.ctx);
         this.displayPlayer();
-        
+        this.displayCoins();
     }
 
     initState() {
@@ -61,8 +64,18 @@ export class Game {
         const positionPlayer = new Point(this.config.PLAYER_X_SLOTS[1], this.config.PLAYER_Y_POSITION);
         this.state.player = new Player(positionPlayer, this.config.PLAYER_X_SLOTS, this.config.PLAYER_RADIUS);
         this.state.player.setListeners(this.ctx.canvas);
-       
-    }   
+        
+        //Generate four Point from the four COIN_SLOTS using PLAYER_Y_POSITION as y coordinate
+        const coinTargets = this.config.COIN_SLOTS.map(x => new Point(x, this.config.PLAYER_Y_POSITION));
+
+        const coinGenerator = new CoinGenerator(
+            this.perspectiveEngine.origin,
+            coinTargets,
+            this.config.COIN_RADIUS, 
+            this.config.COIN_SPEED, 
+            this.config.COIN_INTERVAL_TICKS);
+        this.state.coin_collection = new CoinCollection(coinGenerator, this.config.COIN_INTERVAL_TICKS);
+    }
 
     runProgressBackground(tick) {
         if (tick > this.config.MAX_TICK) { return; }
@@ -101,14 +114,13 @@ export class Game {
         this.state.constellation.draw(this.ctx);
     }
 
-    tempAddRandomStarToConstellation(tick) {
-        if (tick % 180 !== 0) { return; } // 
+    AddRandomStarToConstellation() {
         
         const randomStar = this.state.star_collection.getRandomStar();
         if (randomStar) {
             this.state.constellation.addStar(randomStar);
         }
-        this.state.player.setSuccess(this.config.PLAYER_LIFETIME_SUCCESS_TICKS);
+       
     }
 
     displayPlayer() {
@@ -119,5 +131,38 @@ export class Game {
         this.state.player.run();
     }
 
+    displayCoins() {
+        this.state.coin_collection.draw(this.ctx);
+    }
 
+    runCoins(tick) {
+        this.state.coin_collection.run();
+        
+    }
+
+    checkCollisions() {
+        const player = this.state.player;
+        const coins = this.state.coin_collection.coins;
+        
+        for (let i = 0; i < coins.length; i++) {
+            if (this.isColliding(player, coins[i])) {
+                coins[i].is_captured = true;
+                this.AddRandomStarToConstellation();
+                player.setSuccess(this.config.PLAYER_LIFETIME_SUCCESS_TICKS);
+            }
+        }
+    }
+
+    isColliding(player, coin) {
+        if (coin.is_captured) {
+            return false;
+        }
+        const dx = player.position.x - coin.current_position.x; // noramlized coordinates
+        const dy = player.position.y - coin.current_position.y;
+        const distance = Math.sqrt(dx * dx + dy * dy); // normalized distance
+        const combinedRadius = (player.radius + coin.radius) / (this.ctx.canvas.width*2);
+        return distance < combinedRadius;
+    }
+
+    
 }
