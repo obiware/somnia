@@ -183,7 +183,7 @@ export class Game {
                 this.AddRandomStarToConstellation();
                 player.setSuccess(this.config.PLAYER_LIFETIME_SUCCESS_TICKS);
                 let direction = coins[i].current_position.x < 0.5 ? 0 : 1;
-                console.log("Ringing bell in direction: " + direction);
+                
                 this.soundMachine.ringBell(direction);
             }
         }
@@ -238,7 +238,7 @@ export class SoundMachine {
             this._loadSound('rain', this.background_sound_file),
             this._loadSound('bell', this.bell_sound_file)
         ]);
-        console.log("SoundMachine : Fichiers audio chargés avec succès.");
+        
     }
 
     async _loadSound(key, url) {
