@@ -239,13 +239,14 @@ export class Player {
         this.max_lifetime_success_ticks = 0;
         this.nb_success = 0; // Counter for the number of successes
         this.boost_x_move = boost_x_move;
-    
+        
+        this.startDragX = 0; // To track the initial drag position
     }
 
     setListeners (canvas) {
      
         canvas.addEventListener('mousedown', (e) => {
-           
+            this.startDragX = e.offsetX;
         
             this.dragging = true;
             this.dragOffsetX = e.offsetX - (this.position.x * canvas.width);
@@ -275,6 +276,7 @@ export class Player {
             const t = e.changedTouches[0];
             this.dragging    = true;
             this.touchId     = t.identifier;
+            this.startDragX = t.clientX;
             this.dragOffsetX = t.clientX - this.position.x * canvas.width;
         }, { passive: false });
 
@@ -282,8 +284,16 @@ export class Player {
             e.preventDefault();
             for (const t of e.changedTouches) {
             if (t.identifier !== this.touchId) continue;
-            this.position.x = (t.clientX - (this.dragOffsetX * this.boost_x_move)) / canvas.width;
+
+            const diff = t.clientX - this.startDragX;
+            const diffBoosted = diff * this.boost_x_move;
+
+            this.position.x += diffBoosted / canvas.width;
             this.position.x = Math.max(0, Math.min(1, this.position.x)); // Clamp between 0 and 1
+            this.startDragX = t.clientX;
+
+            //this.position.x = (t.clientX - (this.dragOffsetX * this.boost_x_move)) / canvas.width;
+            //this.position.x = Math.max(0, Math.min(1, this.position.x)); // Clamp between 0 and 1
             }
         }, { passive: false });
 
