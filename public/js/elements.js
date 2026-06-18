@@ -36,17 +36,13 @@ export class Star {
 
         let rn = Math.random();
 
-        if (!this.is_bright && rn < 0.005) {
-            this.is_bright = true;
-           
-        } else if (this.is_bright && rn < 0.005) {
-            this.is_bright = false;
-            
-        }
+       
 
-        let boost_bright = this.is_bright ? 1.2 : 1.0;
-        let boost_shiny = this.is_shiny ? 1.2 : 1.0;
+        let boost_bright = this.is_bright ? 1.4 : 1.0;
+        let boost_shiny = this.is_shiny ? 1.4 : 1.0;
         
+        ctx.save();
+
         const glowGradient = ctx.createRadialGradient(
         x, y, 0,           // Cercle de départ (centre)
         x, y, this.size * 1.5 * boost_shiny * boost_bright   // Cercle d'arrivée (taille du halo)
@@ -86,6 +82,15 @@ export class Star {
         ctx.beginPath();
         ctx.arc(x, y, this.size * 0.6,0, Math.PI * 2);
         ctx.fill();
+        ctx.restore();
+
+         if (!this.is_bright && rn < 0.001) {
+            this.is_bright = true;
+           
+        } else if (this.is_bright && rn < 0.005) {
+            this.is_bright = false;
+            
+        }
     }
 }
 
@@ -120,6 +125,7 @@ export class StarCollection {
             star.draw(ctx);
         }   
     }
+
 }
 
 class StarConnection {
@@ -133,6 +139,8 @@ class StarConnection {
         
         this.speed = new Point(direction.x / path_duration_ticks, direction.y / path_duration_ticks); // pixel by tick
         
+        this.target_star.is_shiny = true;
+        this.target_star.is_bright = true;
     }
 
 
@@ -141,7 +149,7 @@ class StarConnection {
         this.lifeTime_ticks--;
         if (this.lifeTime_ticks <= 0) {
             this.origin_star.is_shiny = false;
-            this.target_star.is_shiny = false;
+           
         }
 
         if (!this.is_completed) {
@@ -152,10 +160,15 @@ class StarConnection {
 
             if (Math.abs(this.current_position.x - this.target_star.position.x) < 0.01 && Math.abs(this.current_position.y - this.target_star.position.y) < 0.01) {
                 this.is_completed = true;
+                this.origin_star.is_shiny = false;
+                this.origin_star.is_bright = false;
                 this.current_position.x = this.target_star.position.x;
                 this.current_position.y = this.target_star.position.y;
             }   
         }
+
+        this.origin_star.is_bright = true;
+        this.target_star.is_bright = true;
 
         
     }
@@ -195,10 +208,7 @@ export class Constellation {
         
         for (let connection of this.connections) {
             const shiny_color = [253, 245, 234];
-            connection.origin_star.is_shiny = true;
-            connection.origin_star.is_bright = true;
-            connection.target_star.is_shiny = connection.is_completed;
-            connection.target_star.is_bright = true;
+           
             let intensity_factor = Math.min(connection.lifeTime_ticks / this.max_lifetime_ticks, 1.0);
             ctx.strokeStyle = `rgba(${shiny_color[0]}, ${shiny_color[1]}, ${shiny_color[2]}, ${0.7 * intensity_factor})`;
             ctx.lineWidth = 1.5 * intensity_factor;

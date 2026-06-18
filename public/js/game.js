@@ -117,8 +117,17 @@ export class Game {
     AddRandomStarToConstellation() {
         
         const randomStar = this.state.star_collection.getRandomStar();
+        
         if (randomStar) {
             this.state.constellation.addStar(randomStar);
+        }
+
+        // If it was the first start, we quickly add a second to draw the first path
+        if (this.state.constellation.connections.length == 1) {
+            const randomStar = this.state.star_collection.getRandomStar();
+            if (randomStar) {
+                this.state.constellation.addStar(randomStar);
+            }
         }
        
     }
